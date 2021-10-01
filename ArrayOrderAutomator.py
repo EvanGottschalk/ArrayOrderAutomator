@@ -10,10 +10,21 @@ import traceback
 
 # AudioPlayer is an optional module for adding audio alerts, which trigger under certain circumstances
 from AudioPlayer import AudioPlayer
+
+# GetCurrentTime.py has functions for easily acquiring the current date or time separately or together, and other time functions
 from GetCurrentTime import GetCurrentTime
+
+# ConvertTimestamp is a handy tool for converting timestamp values to amounts of time measured in minutes/hours/etc.
 from ConvertTimestamp import ConvertTimestamp
 
+# OperateExchange is the program which this calculates the arrangements of the groups of orders created by ArrayOrderAutomator
 from OperateExchange import OperateExchange
+
+# This function will create the ArrayOrderAutomator class in a non-local scope, making it more secure
+def main():
+    AOA = ArrayOrderAutomator()
+    AOA.main_loop()
+    del AOA
 
 class ArrayOrderAutomator:
     def __init__(self):
@@ -1421,11 +1432,8 @@ class ArrayOrderAutomator:
         self.currentPositionLog = {'Entry Amount Closed': 0, \
                                    'Exit Amount Closed': 0, \
                                    'Entry Amount Rebuilt': 0}
-            
-
         
 
-
-        
-AOA = ArrayOrderAutomator()
-AOA.main()
+# This will create the ArrayOrderAutomator class in a non-local scope, making it more secure
+if __name__ == "__main__":
+    main()
