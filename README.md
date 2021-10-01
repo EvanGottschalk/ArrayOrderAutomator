@@ -114,7 +114,7 @@ EXAMPLE FROM OPERATEEXCHANGEGUI
 
     If your API key is `view-only`, you can save your cryptocurrency exchange API key on the 1st line, and your API secret on the 2nd. However, **if your API key has `trade` priveleges, you should save an encrypted version of both your key and secret on those lines instead.**
 
-    To encrypt your API information, I recommend using `CustomEncryptor.py`, which can be downloaded here: [github.com/EvanGottschalk/CustomEncryptor](https://github.com/EvanGottschalk/CustomEncryptor)
+    To encrypt your API information, I recommend using [`CustomEncryptor.py`](https://github.com/EvanGottschalk/CustomEncryptor)
 
 4. Modify the automation settings in the `self.automationSettingsDict` dictionary in `ArrayOrderAutomator.py` to your liking.
 
