@@ -95,7 +95,9 @@ class ArrayOrderAutomator:
                                    'Relief Order %': .075, \
                                    'Relief Trigger Amount': 0}
         self.activeArrayOrderNumbers = {'Long': '', \
-                                        'Short': ''}
+                                        'Short': '', \
+                                        'Long Relief': '', \
+                                        'Short Relief': ''}
         self.exitStrategies = {1: 'Original', \
                                2: 'Original+', \
                                3: 'Profit at Midpoint', \
@@ -1001,9 +1003,10 @@ class ArrayOrderAutomator:
         style = self.automationSettings['Entry Style']
         steepness = self.automationSettings['Entry Steepness']
         quick_granularity_intensity = self.automationSettings['Quick Granularity Intensity']
-        qg_start_percent = False
-        qg_end_percent = False
-        maximum_amount = False
+        qg_start_percent = None
+        qg_end_percent = None
+        maximum_amount = None
+        relief_amount = None
     # Creates BUY order
         if side == 'buy':
             amount = self.automationSettings['Long Entry Amount']
@@ -1032,6 +1035,7 @@ class ArrayOrderAutomator:
                         # amount is reduced to complement a Relief Order if the current position size is large enough
                         if self.automationSettings['Relief Order %'] and self.automationSettings['Relief Trigger Amount']:
                             if self.automationSettings['Relief Trigger Amount'] >= amount:
+                                relief_amount = amount * self.automationSettings['Relief Order %']
                                 amount = amount * (1 - self.automationSettings['Relief Order %'])
             end_price = starting_price - spread
             if starting_price - self.OE.current_price >= .3 * spread:
@@ -1064,6 +1068,7 @@ class ArrayOrderAutomator:
                         # amount is reduced to complement a Relief Order if the current position size is large enough
                         if self.automationSettings['Relief Order %'] and self.automationSettings['Relief Trigger Amount']:
                             if self.automationSettings['Relief Trigger Amount'] >= amount:
+                                relief_amount = amount * self.automationSettings['Relief Order %']
                                 amount = amount * (1 - self.automationSettings['Relief Order %'])
             end_price = starting_price + spread
             if self.OE.current_price - starting_price >= .3 * spread:
@@ -1155,6 +1160,38 @@ class ArrayOrderAutomator:
             print('\nAOA : !!!!!!!!!!!!!!!!!!!!!!!!!! Order is NOT BEING CREATED due to a critical calculation error!!!!!!!!!!!!!!!!!!!!!!!!')
             self.AP.playSound('Navi Hey')
         else:
+        # Relief Order is created if creating an exit order and Relief Order conditions are met
+            if relief_amount:
+                relief_spread = abs(self.OE.current_price - starting_price)
+                relief_granularity = relief_spread / relief_amount
+                if relief_granularity == (int(2 * relief_granularity) / 2):
+                    relief_granularity = int(2 * relief_granularity) / 2
+                else:
+                    relief_granularity = (int(2 * relief_granularity) / 2) + .5
+                self.OE.orderSettings = {'Exchange': 'Default', \
+                                         'Account': self.automationSettings['Account'], \
+                                         'Symbol': self.automationSettings['Symbol'], \
+                                         'Side': side, \
+                                         'Amount': relief_amount, \
+                                         'Order Type': 'Limit', \
+                                         'Price': self.OE.current_price}
+                self.OE.arrayOrderSettings = {'Granularity': relief_granularity, \
+                                              'Spread': relief_spread, \
+                                              'End Price': starting_price, \
+                                              'Steepness': 0, \
+                                              'Minimum Order Size': 1, \
+                                              'Style': 'Uniform', \
+                                              'Quick Granularity Intensity': 0, \
+                                              'Quick Granularity Start %': 0, \
+                                              'Quick Granularity End %': 0}
+                self.OE.createArrayOrder('update_current_parameters')
+                if not(self.testing):
+                    new_order = self.OE.executeArrayOrders(self.OE.arrayOrderParameters['Individual Order Settings'])
+                    if side == 'buy':
+                        self.activeArrayOrderNumbers['Long Relief'] = new_order['Array Order Number']
+                    else:
+                        self.activeArrayOrderNumbers['Short Relief'] = new_order['Array Order Number']
+                print('AOA : ' + side.upper() + ' Relief Array Order created to EXIT ' + self.exiting + ' position!\n')
             self.OE.orderSettings = {'Exchange': 'Default', \
                                      'Account': self.automationSettings['Account'], \
                                      'Symbol': self.automationSettings['Symbol'], \
