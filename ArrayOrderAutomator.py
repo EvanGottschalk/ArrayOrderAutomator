@@ -23,7 +23,7 @@ from OperateExchange import OperateExchange
 # This function will create the ArrayOrderAutomator class in a non-local scope, making it more secure
 def main():
     AOA = ArrayOrderAutomator()
-    AOA.main_loop()
+    AOA.main()
     del AOA
 
 class ArrayOrderAutomator:
@@ -38,7 +38,8 @@ class ArrayOrderAutomator:
                                       'Session Total PNL': ''}
         self.automationSettings = {'Account': 'Main', \
                                    'Symbol': 'BTC/USD', \
-                                   'Number of Entry Orders': 65, \
+                                   'Number of Entry Orders': 61, \
+                                                            #65, \
                                    'Exit Strategy': 'Profit at Entry', \
                                    # ^ This determines how the orders that close positions are calculated
                                    'Rebuild Strategy': 'No Rebuild', \
@@ -51,16 +52,16 @@ class ArrayOrderAutomator:
                                    'Entry Style': 'Linear', \
                                    'Exit Style': 'Linear', \
                                    'Quick Granularity Intensity': 1, \
-                                   'Long Entry Spread %': .0325, \
-                                   'Short Entry Spread %': .04, \
+                                   'Long Entry Spread %': .04, \
+                                   'Short Entry Spread %': .06, \
                                    'Long Exit Spread %': .01, \
                                    'Short Exit Spread %': .01, \
                                    # 15% seem to be the max change possible in a very short period
                                    'Refresh Rate': 20, \
                                    'Long Shift Gap': 60, \
                                    'Short Shift Gap': 60, \
-                                   'Long Entry Amount': 10000, \
-                                   'Short Entry Amount': 9500, \
+                                   'Long Entry Amount': 7500, \
+                                   'Short Entry Amount': 7000, \
                                    'Exit Amount': 5, \
                                    #^ This could also be a % of the Long or Short Amount (side being determined by the side of the position)
                                    #maybe get rid of Exit Amount and just use 0 - always treat the side you're on differently from the other
@@ -86,8 +87,13 @@ class ArrayOrderAutomator:
                                    'Quick Granularity Berth Adjustment Gap': .0125, \
                                    # ^ This is the minimum % the current_price needs to deviate from the Quick Granularity Start %  and
                                    #   towards the Array Order Starting Price for an entry order to be shifted
-                                   'Slow Granularity Multiplier': 5}
+                                   'Slow Granularity Multiplier': 5, \
                                    # ^ The spread beyond the Quick Granularity % is multiplied by this number
+                                   # Relief Orders are uniform Array Orders created on the wrong side of the position, reducing the risk of getting stuck in a trade
+                                   # Relief Order % is the percentage amount of the current position size to be bought/sold on the wrong side
+                                   # Relief Order Trigger Amount is the minimum position amount necessary to initiate the use of Relief Orders
+                                   'Relief Order %': .075, \
+                                   'Relief Trigger Amount': 0}
         self.activeArrayOrderNumbers = {'Long': '', \
                                         'Short': ''}
         self.exitStrategies = {1: 'Original', \
@@ -1023,6 +1029,10 @@ class ArrayOrderAutomator:
                         steepness = self.automationSettings['Exit Steepness']
                         amount = self.currentPositionDict['Amount']
                         quick_granularity_intensity = False
+                        # amount is reduced to complement a Relief Order if the current position size is large enough
+                        if self.automationSettings['Relief Order %'] and self.automationSettings['Relief Trigger Amount']:
+                            if self.automationSettings['Relief Trigger Amount'] >= amount:
+                                amount = amount * (1 - self.automationSettings['Relief Order %'])
             end_price = starting_price - spread
             if starting_price - self.OE.current_price >= .3 * spread:
                 quick_granularity_intensity = False
@@ -1051,6 +1061,10 @@ class ArrayOrderAutomator:
                         steepness = self.automationSettings['Exit Steepness']
                         amount = self.currentPositionDict['Amount']
                         quick_granularity_intensity = False
+                        # amount is reduced to complement a Relief Order if the current position size is large enough
+                        if self.automationSettings['Relief Order %'] and self.automationSettings['Relief Trigger Amount']:
+                            if self.automationSettings['Relief Trigger Amount'] >= amount:
+                                amount = amount * (1 - self.automationSettings['Relief Order %'])
             end_price = starting_price + spread
             if self.OE.current_price - starting_price >= .3 * spread:
                 quick_granularity_intensity = False
