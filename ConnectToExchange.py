@@ -249,7 +249,7 @@ class ConnectToExchange:
             key = self.exchangeAccounts[exchange_name][account_name]['apiKey']
             secret = self.exchangeAccounts[exchange_name][account_name]['secret']
         try:
-        # The API connection to the exchange is made
+            # The API connection to the exchange is made
             self.exchange = ccxt.kraken({'apiKey': key, \
                                          'secret': secret, \
                                          'timeout': 30000, \
@@ -302,7 +302,7 @@ class ConnectToExchange:
                                           'Activity Log': {}}
                 if not(self.silent_mode):
                     print('CTE : No Daily Activity Log found for today!')
-            # A new activity log entry si created and saved
+            # A new activity log entry is created and saved
             self.currentConnectionDetails['Time of Access'] = str(datetime.now())
             self.activityLog_Current[timestamp] = {'Activity': 'Connected', \
                                                    'Date': date, \
@@ -348,25 +348,16 @@ class ConnectToExchange:
             print('CTE : ERROR! Failed to find API Key file.')
 
 # This function is for retrieving information about open trading positions
-    def getPositions(self, *args):
-    # The only argument getPositions takes is an exchange name, which is optional
-    # If called with no argument, it will try to see if it's already connected to an exchange. If it's not, it connects to the default exchange
-        if len(args) > 0:
-            self.connect(args[0])
-        else:
-            try:
-                self.exchange.fetchTicker('BTC/USDT')
-            except:
-                try:
-                    self.exchange.fetchTicker('BTC/USD')
-                except:
-                    self.connect(self.exchangeAccounts['Default'])
+    def getPositions(self, exchange=None):
+        if exchange:
+            self.connect(exchange)
+        elif not(self.exchange):            
+            self.connect(self.exchangeAccounts['Default'])
         positions = False
         number_of_attempts = 0
         while not(positions):
             number_of_attempts += 1
             try:
-            # This is the line that uses CCXT to actually get the information about the position
                 positions = self.exchange.fetch_positions(None, {'currency':'BTC'})
             except Exception as error:
                 positions = False
@@ -375,7 +366,7 @@ class ConnectToExchange:
                                       'program': 'CTE', \
                                       'line_number': traceback.format_exc().split('line ')[1].split(',')[0], \
                                       'number_of_attempts': number_of_attempts})
-    # positions_dict is a cleaned up version of the raw position information retrieved by exchange.fetch_positions()
+        # positions_dict is a tidier version of the raw position information retrieved by exchange.fetch_positions()
         positions_dict = {}
         positions_dict['Entry Price'] = float(positions[0]['avgEntryPrice'])
         positions_dict['Side'] = positions[0]['side']
