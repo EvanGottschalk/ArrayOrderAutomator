@@ -1189,6 +1189,8 @@ class ConnectToExchange:
 
 # This function returns the current price of an asset
     def fetchCurrentPrice(self, *args):
+        if not self.exchange:
+            self.connect()
         try:
             symbol = args[0]['Symbol']
         except:
@@ -1204,9 +1206,10 @@ class ConnectToExchange:
                                       'description': 'checking the current BTC price', \
                                       'program': 'CTE', \
                                       'line_number': traceback.format_exc().split('line ')[1].split(',')[0], \
+                                      'pause_time': 3, \
                                       'number_of_attempts': number_of_attempts})
                 current_price = False
-                if number_of_attempts % 5 == 0:
+                if number_of_attempts % 3 == 0:
                     self.connect(self.exchangeAccounts['Default'])
         return(current_price)
 
@@ -1221,7 +1224,7 @@ class ConnectToExchange:
         try:
             symbol = args[0]['Symbol']
         except:
-            symbol = 'BTC/USD'
+            symbol = 'BTCUSD'
         try:
             open_orders = self.exchange.fetchOpenOrders(symbol)
         except:
