@@ -1213,37 +1213,30 @@ class ConnectToExchange:
                     self.connect(self.exchangeAccounts['Default'])
         return(current_price)
 
-# This function returns information about all of a user's open orders
-    def fetchOpenOrders(self, *args):
-        print('CTE : Fetching open orders...............')
-        try:
-            self.connect(args[0]['Exchange'])
-        except:
-            if not(self.exchange):
-                self.connect(self.exchangeAccounts['Default'])
-        try:
-            symbol = args[0]['Symbol']
-        except:
+    # This function returns information about all of a user's open orders
+    def fetchOpenOrders(self, exchange=None, symbol=None):
+        if not(self.silent_mode):
+            print('CTE : Fetching open orders...............')
+        if exchange:
+            self.connect(exchange)
+        elif not(self.exchange):
+            self.connect()
+        if not(symbol):
             symbol = 'BTCUSD'
-        try:
-            open_orders = self.exchange.fetchOpenOrders(symbol)
-        except:
-            open_orders = []
-##        open_orders = False
-##        number_of_attempts = 0
-##        while not(open_orders):
-##            number_of_attempts += 1
-##            try:
-##                open_orders = self.exchange.fetchOpenOrders(symbol)
-##            except Exception as error:
-##                self.inCaseOfError(**{'Error': error, \
-##                                    'Description': 'trying to fetch open orders', \
-##                                    'Program': 'CTE', \
-##                                    '# of Attempts': number_of_attempts})
-##                open_orders = False
-##                print(number_of_attempts)
-##                if number_of_attempts >= 3:
-##                    open_orders = []
+        open_orders = []
+        number_of_attempts = 0
+        while open_orders == [] and number_of_attempts < 3:
+            number_of_attempts += 1
+            try:
+                open_orders = self.exchange.fetchOpenOrders(symbol)
+            except Exception as error:
+                self.inCaseOfError(**{'error': error, \
+                                      'description': 'trying to fetch open orders', \
+                                      'program': 'CTE', \
+                                      'line_number': traceback.format_exc().split('line ')[1].split(',')[0], \
+                                      'pause_time': 3, \
+                                      'number_of_attempts': number_of_attempts})
+                open_orders = []
         if not(self.silent_mode):
             print('CTE : Open orders fetched!')
         return(open_orders)
