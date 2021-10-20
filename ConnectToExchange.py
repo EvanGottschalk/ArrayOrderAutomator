@@ -513,18 +513,25 @@ class ConnectToExchange:
             if (symbol == 'all') or (available_symbol == symbol.upper()):
                 available_symbol = available_symbol.split('/')[0]
                 contract_balances[available_symbol] = {}
-                try:
-                    if available_symbol == 'BTC':
-                        raw_contract_balance = self.exchange.fetch_balance(params={'type': 'swap', 'currency': available_symbol})
-                        contract_balances[available_symbol]['free'] = float(raw_contract_balance[available_symbol]['free'])
-                        contract_balances[available_symbol]['used'] = float(raw_contract_balance[available_symbol]['used'])
-                        contract_balances[available_symbol]['total'] = float(raw_contract_balance[available_symbol]['total'])
-                        contract_balances[available_symbol]['dict'] = raw_contract_balance
-                except Exception as error:
-                    self.inCaseOfError(**{'error': error, \
-                                          'description': 'fetching ' + available_symbol + ' Contract balance', \
-                                          'program': 'CTE', \
-                                          'line_number': traceback.format_exc().split('line ')[1].split(',')[0]})
+                raw_contract_balance = None
+                number_of_attempts = 0
+                while (raw_contract_balance == None) and (number_of_attempts < 2):
+                    number_of_attempts += 1
+                    try:
+                        if available_symbol == 'BTC':
+                            raw_contract_balance = self.exchange.fetch_balance(params={'type': 'swap', 'currency': available_symbol})
+                            contract_balances[available_symbol]['free'] = float(raw_contract_balance[available_symbol]['free'])
+                            contract_balances[available_symbol]['used'] = float(raw_contract_balance[available_symbol]['used'])
+                            contract_balances[available_symbol]['total'] = float(raw_contract_balance[available_symbol]['total'])
+                            contract_balances[available_symbol]['dict'] = raw_contract_balance
+                    except Exception as error:
+                        self.inCaseOfError(**{'error': error, \
+                                              'description': 'fetching ' + available_symbol + ' Contract balance', \
+                                              'program': 'CTE', \
+                                              'pause_time': 3, \
+                                              'number_of_attempts': number_of_attempts})
+                                              'line_number': traceback.format_exc().split('line ')[1].split(',')[0]})
+                        raw_contract_balance = None
         self.balances['Contract'] = contract_balances
         return(self.balances)
 
