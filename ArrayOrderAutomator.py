@@ -38,30 +38,30 @@ class ArrayOrderAutomator:
                                       'Session Total PNL': ''}
         self.automationSettings = {'Account': 'Main', \
                                    'Symbol': 'BTC/USD', \
-                                   'Number of Entry Orders': 61, \
+                                   'Number of Entry Orders': 62, \
                                                             #65, \
                                    'Exit Strategy': 'Profit at Entry', \
                                    # ^ This determines how the orders that close positions are calculated
                                    'Rebuild Strategy': 'No Rebuild', \
                                    # ^ This determines the amount of an entry order to rebuild that has been partly filled
                                    'Initial Starting Price': False, \
-                                   'Starting Price Gap %': .00025, \
+                                   'Starting Price Gap %': .0001, \
                                    # ^ This determines the small price gap between the position entry price and the first order in an exit Array Order
                                    'Entry Steepness': 2.1, \
                                    'Exit Steepness': 0, \
                                    'Entry Style': 'Linear', \
                                    'Exit Style': 'Linear', \
                                    'Quick Granularity Intensity': 1, \
-                                   'Long Entry Spread %': .04, \
-                                   'Short Entry Spread %': .06, \
+                                   'Long Entry Spread %': .0375, \
+                                   'Short Entry Spread %': .04, \
                                    'Long Exit Spread %': .01, \
                                    'Short Exit Spread %': .01, \
                                    # 15% seem to be the max change possible in a very short period
                                    'Refresh Rate': 20, \
                                    'Long Shift Gap': 60, \
                                    'Short Shift Gap': 60, \
-                                   'Long Entry Amount': 7500, \
-                                   'Short Entry Amount': 7000, \
+                                   'Long Entry Amount': 8000, \
+                                   'Short Entry Amount': 7500, \
                                    'Exit Amount': 5, \
                                    #^ This could also be a % of the Long or Short Amount (side being determined by the side of the position)
                                    #maybe get rid of Exit Amount and just use 0 - always treat the side you're on differently from the other
@@ -112,6 +112,7 @@ class ArrayOrderAutomator:
                                     'Liqudation Price': 1, \
                                     'Stop Loss': 1, \
                                     'Raw Positions List': []}
+        self.marketsToCheck = ['DOGE/USD', 'ETH/USD', 'LTC/USD']
         self.main_loop = True
         self.exiting = False
         self.initial_orders_created = False
@@ -216,11 +217,20 @@ class ArrayOrderAutomator:
         run_time_seconds = 0
         last_second = int(self.automationSessionData['Start Timestamp'])
         refresh_count = 0
-        self.OE.cancelOrderGroup({'Symbol': self.automationSettings['Symbol']})
+        # This cancels any orders that you have open (unless they are for a different cryptocurrency)
+        use_cancel_all = True
+        for symbol in self.marketsToCheck:
+            if self.OE.CTE.fetchOpenOrders(symbol=symbol, pause_time=0, maximum_number_of_attempts=1) != []:
+                use_cancel_all = False
+        if use_cancel_all:
+            self.OE.CTE.exchange.cancel_all_orders()
+        else:
+            self.OE.cancelOrderGroup({'Symbol': self.automationSettings['Symbol']})
         self.previousPositionDict = {'Amount': 0}
         self.currentPositionLog = {'Entry Amount Closed': 0, \
                                    'Exit Amount Closed': 0, \
                                    'Entry Amount Rebuilt': 0}
+        self.initializing = True
         while self.automate_orders:
             current_second = int(self.GCT.getTimeStamp())
             if current_second != last_second:
@@ -259,15 +269,16 @@ class ArrayOrderAutomator:
                             self.currentPositionLog['Exit Amount Closed'] += (self.previousPositionDict['Amount'] - self.currentPositionDict['Amount'])
                         else:
                             self.currentPositionLog['Entry Amount Closed'] += (self.currentPositionDict['Amount'] - self.previousPositionDict['Amount'])
-                        self.updateActiveOrders()
+                        if not(self.initializing):
+                            self.updateActiveOrders()
                     self.order_created_this_loop = False
         # I: Initial Array Orders are Created
                     print('\nAOA : #1 - Initial Array Orders are Created')
                 # Initial Long array order
                     print('\nAOA : Checking LONG Array Order...')
+                    self.exitCheck()
                     if self.activeArrayOrderNumbers['Long'] == '':
                         if self.currentPositionDict['Amount'] > 0:
-                            self.exitCheck()
                             if self.exiting and self.currentPositionDict['Side'].lower() == 'sell':
                                 print('\nAOA : No order found but we are in a short position! Creating LONG EXIT order at $' + str(self.OE.current_price))
                             else:
@@ -281,7 +292,6 @@ class ArrayOrderAutomator:
                     print('\nAOA : Checking SHORT Array Order...')
                     if self.activeArrayOrderNumbers['Short'] == '':
                         if self.currentPositionDict['Amount'] > 0:
-                            self.exitCheck()
                             if self.exiting and self.currentPositionDict['Side'].lower() == 'buy':
                                 print('\nAOA : No order found but we are in a long position! Creating SHORT EXIT order at $' + str(self.OE.current_price))
                             else:
@@ -301,6 +311,8 @@ class ArrayOrderAutomator:
                         self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
                     self.initial_orders_created = True
                     self.settings_loaded_from_file = False
+                    if self.initializing:
+                        self.initializing = False
 #######################################################################################################
 ####    Reasons to cancel and recreate orders:
 ####        1. Long or Short Shift Gap
@@ -676,13 +688,20 @@ class ArrayOrderAutomator:
                         self.updateActiveOrders()
                         print('AOA : ---------------- These two numbers should be the same:')
                         print('AOA : ----------------     currentPositionDict Amount:    ' + str(self.currentPositionDict['Amount']))
-                        print('AOA : ----------------     arrayOrderLedger Total Amount: ' + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Total Amount']))
-                        
+                        #print('AOA : ----------------     arrayOrderLedger Total Amount: ' + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Total Amount']))
+                        try:
+                            print('AOA : ----------------     arrayOrderLedger Total Amount: ' + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Total Amount']))
+                        except Exception as error:
+                            print('Error on line 695:', error)                            
                     elif self.exiting == 'Short':
                         self.updateActiveOrders()
                         print('AOA : ---------------- These two numbers should be the same:')
                         print('AOA : ----------------     currentPositionDict Amount:    ' + str(self.currentPositionDict['Amount']))
-                        print('AOA : ----------------     arrayOrderLedger Total Amount: ' + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Total Amount']))
+                        #print('AOA : ----------------     arrayOrderLedger Total Amount: ' + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Total Amount']))
+                        try:
+                            print('AOA : ----------------     arrayOrderLedger Total Amount: ' + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Total Amount']))
+                        except Exception as error:
+                            print('Error on line 695:', error)
                     session_PNL = self.OE.CTE.getBalances()['Spot'][self.automationSettings['Symbol'].split('/')[0]]['total'] - self.starting_balance
                     session_PNL_in_USD = round(self.OE.current_price * session_PNL, 2)
                     self.automationSessionData['Session Total PNL'] = session_PNL
@@ -770,6 +789,7 @@ class ArrayOrderAutomator:
 
 
     def calculateSpread(self, side, starting_price):
+        print('AOA : Calculating Spread for ' + side + ' order starting at $' + str(starting_price) + ' ...')
     # Set Variables
         current_position_amount = self.currentPositionDict['Amount']
         current_position_side = self.currentPositionDict['Side']
@@ -847,9 +867,11 @@ class ArrayOrderAutomator:
             elif side == 'sell' and self.currentPositionDict['Side'].lower() == 'buy':
                 spread = self.automationSettings['Minimum Exit Spread']
                 spread = spread * (1 + (self.currentPositionDict['Amount'] / self.automationSettings['Long Entry Amount']))
+        print('AOA : Spread calculated: $' + str(spread))
         return(spread)
 
     def calculateStartingPrice(self, side):
+        print('AOA : Calculating Starting Price for ' + side + ' order...')
         starting_price = self.OE.current_price
         if self.initial_orders_created or (not(self.initial_orders_created) and not(self.automationSettings['Initial Starting Price'])):
             if side == 'buy':
@@ -911,15 +933,18 @@ class ArrayOrderAutomator:
                                                  self.OE.current_price)
                     else:
                         starting_price = self.currentPositionDict['Entry Price'] * (1 + self.automationSettings['Starting Price Gap %'])
+        print('AOA : Starting Price calculated: $' + str(starting_price))
         return(starting_price)
 
     def calculateQuickGranularitySpread(self, side, spread, array_order_starting_price, intended_array_order_starting_price):
+        print('AOA : Calculating QG Spread for ' + side + ' order with a Spread of $' + str(spread) + \
+              ', a starting price of $' + str(array_order_starting_price) + \
+              ' and an intended starting price of $' + str(intended_array_order_starting_price) + ' ...')
         qg_spread_percent = self.automationSettings['Quick Granularity Spread %']
         qg_berth = self.automationSettings['Quick Granularity Berth']
         qg_spread = qg_spread_percent * spread
         if side == 'buy':
             array_order_ending_price = intended_array_order_starting_price - spread
-            print(self.OE.current_price, spread, qg_berth, intended_array_order_starting_price)
             qg_start_price = self.OE.current_price + (spread * qg_berth)
             if qg_start_price > intended_array_order_starting_price:
                 qg_start_price = intended_array_order_starting_price
@@ -942,7 +967,6 @@ class ArrayOrderAutomator:
                       ' is equal to the LONG Array Order Starting Price $' + str(intended_array_order_starting_price))
         elif side == 'sell':
             array_order_ending_price = intended_array_order_starting_price + spread
-            print(self.OE.current_price, spread, qg_berth, intended_array_order_starting_price)
             qg_start_price = self.OE.current_price - (spread * qg_berth)
             if qg_start_price < intended_array_order_starting_price:
                 qg_start_price = intended_array_order_starting_price
@@ -966,6 +990,7 @@ class ArrayOrderAutomator:
 
         quick_granularity_spread_dict = {'Quick Granularity Start %': qg_start_percent, \
                                          'Quick Granularity End %': qg_end_percent}
+        print('AOA : QG Spread calculated!')
         print(quick_granularity_spread_dict)
         return(quick_granularity_spread_dict)
 
@@ -1337,7 +1362,7 @@ class ArrayOrderAutomator:
                 else:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Starting Price'] = False
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Ending Price'] = False
-                    #self.activeArrayOrderNumbers['Long'] = ''
+                    self.activeArrayOrderNumbers['Long'] = ''
           # Short
             if self.activeArrayOrderNumbers['Short'] != '':
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Active Orders'] = sell_orders
@@ -1351,17 +1376,17 @@ class ArrayOrderAutomator:
                 else:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price'] = False
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Ending Price'] = False
-                    #self.activeArrayOrderNumbers['Short'] = ''
+                    self.activeArrayOrderNumbers['Short'] = ''
         else:
             print('AOA : No active orders!')
             if self.activeArrayOrderNumbers['Long'] != '':
-                #self.activeArrayOrderNumbers['Long'] = ''
+                self.activeArrayOrderNumbers['Long'] = ''
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Active Orders'] = []
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Total Amount'] = 0
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Starting Price'] = False
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Ending Price'] = False
             if self.activeArrayOrderNumbers['Short'] != '':
-                #self.activeArrayOrderNumbers['Short'] = ''
+                self.activeArrayOrderNumbers['Short'] = ''
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Active Orders'] = []
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Total Amount'] = 0
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price'] = False
