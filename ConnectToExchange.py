@@ -1214,7 +1214,7 @@ class ConnectToExchange:
         return(current_price)
 
     # This function returns information about all of a user's open orders
-    def fetchOpenOrders(self, exchange=None, symbol=None):
+    def fetchOpenOrders(self, exchange=None, symbol=None, pause_time=3, maximum_number_of_attempts=2):
         if not(self.silent_mode):
             print('CTE : Fetching open orders...............')
         if exchange:
@@ -1225,7 +1225,7 @@ class ConnectToExchange:
             symbol = 'BTCUSD'
         open_orders = []
         number_of_attempts = 0
-        while open_orders == [] and number_of_attempts < 3:
+        while open_orders == [] and number_of_attempts < maximum_number_of_attempts:
             number_of_attempts += 1
             try:
                 open_orders = self.exchange.fetchOpenOrders(symbol)
@@ -1234,7 +1234,7 @@ class ConnectToExchange:
                                       'description': 'trying to fetch open orders', \
                                       'program': 'CTE', \
                                       'line_number': traceback.format_exc().split('line ')[1].split(',')[0], \
-                                      'pause_time': 3, \
+                                      'pause_time': pause_time, \
                                       'number_of_attempts': number_of_attempts})
                 open_orders = []
         if not(self.silent_mode):
