@@ -525,13 +525,13 @@ class ConnectToExchange:
                             contract_balances[available_symbol]['total'] = float(raw_contract_balance[available_symbol]['total'])
                             contract_balances[available_symbol]['dict'] = raw_contract_balance
                     except Exception as error:
+                        raw_contract_balance = None
                         self.inCaseOfError(**{'error': error, \
                                               'description': 'fetching ' + available_symbol + ' Contract balance', \
                                               'program': 'CTE', \
                                               'pause_time': 3, \
-                                              'number_of_attempts': number_of_attempts})
+                                              'number_of_attempts': number_of_attempts, \
                                               'line_number': traceback.format_exc().split('line ')[1].split(',')[0]})
-                        raw_contract_balance = None
         self.balances['Contract'] = contract_balances
         return(self.balances)
 
@@ -1221,7 +1221,7 @@ class ConnectToExchange:
         return(current_price)
 
     # This function returns information about all of a user's open orders
-    def fetchOpenOrders(self, exchange=None, symbol=None, pause_time=3, maximum_number_of_attempts=2):
+    def fetchOpenOrders(self, exchange=None, symbol=None, alert=True, pause_time=3, maximum_number_of_attempts=2):
         if not(self.silent_mode):
             print('CTE : Fetching open orders...............')
         if exchange:
@@ -1242,7 +1242,8 @@ class ConnectToExchange:
                                       'program': 'CTE', \
                                       'line_number': traceback.format_exc().split('line ')[1].split(',')[0], \
                                       'pause_time': pause_time, \
-                                      'number_of_attempts': number_of_attempts})
+                                      'number_of_attempts': number_of_attempts, \
+                                      'alert': alert})
                 open_orders = []
         if not(self.silent_mode):
             print('CTE : Open orders fetched!')
@@ -1268,7 +1269,7 @@ class ConnectToExchange:
         updated_master_OHLCVs.to_csv(str(pathlib.Path().absolute()) + '/_OHLCV_Repository/Master ' + timeframe + ' OHLCVs.csv')
         
 # This function displays a message in case there is an error, and saves the information about the error to a CSV log
-    def inCaseOfError(self, error=None, description=None, pause_time=0, program=None, line_number=None, number_of_attempts=1):
+    def inCaseOfError(self, error=None, description=None, pause_time=0, program=None, line_number=None, number_of_attempts=1, alert=True):
         print(program + ' : !!! ERROR occurred on line ' + str(line_number) + ' while ' + description)
         print(program + ' : Error: ' + str(error))
         pause_for_error = True
@@ -1281,7 +1282,8 @@ class ConnectToExchange:
                       'Line #': line_number, \
                       '# of Attempts': number_of_attempts}
         self.error_log.append(error_dict)
-        self.AP.playSound('Navi Hey')
+        if alert:
+            self.AP.playSound('Navi Hey')
         if pause_time > 0:
             print('CTE : Pausing for ' + str(pause_time) + ' seconds')
             while pause_for_error:
