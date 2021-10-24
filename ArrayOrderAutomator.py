@@ -44,6 +44,7 @@ class ArrayOrderAutomator:
                                    # ^ This determines how the orders that close positions are calculated
                                    'Rebuild Strategy': 'No Rebuild', \
                                    # ^ This determines the amount of an entry order to rebuild that has been partly filled
+                                   'Stop-Loss Strategy': True, \
                                    'Initial Starting Price': False, \
                                    'Starting Price Gap %': .0001, \
                                    # ^ This determines the small price gap between the position entry price and the first order in an exit Array Order
@@ -56,6 +57,7 @@ class ArrayOrderAutomator:
                                    'Short Entry Spread %': .04, \
                                    'Long Exit Spread %': .01, \
                                    'Short Exit Spread %': .01, \
+                                   'Stop-Loss Spread %': .043, \
                                    # 15% seem to be the max change possible in a very short period
                                    'Refresh Rate': 20, \
                                    'Long Shift Gap': 60, \
@@ -98,6 +100,9 @@ class ArrayOrderAutomator:
                                         'Short': '', \
                                         'Long Relief': '', \
                                         'Short Relief': ''}
+        self.stopLossOrder = ''
+        self.openStopLossOrders = {'Open Orders': {}, \
+                                   'Total Amount': 0}
         self.exitStrategies = {1: 'Original', \
                                2: 'Original+', \
                                3: 'Profit at Midpoint', \
@@ -110,7 +115,7 @@ class ArrayOrderAutomator:
                                     'Leverage': 1, \
                                     'Amount': 1, \
                                     'Liqudation Price': 1, \
-                                    'Stop Loss': 1, \
+                                    'Stop-Loss': 0, \
                                     'Raw Positions List': []}
         self.marketsToCheck = ['DOGE/USD', 'ETH/USD', 'LTC/USD']
         self.main_loop = True
@@ -220,12 +225,12 @@ class ArrayOrderAutomator:
         # This cancels any orders that you have open (unless they are for a different cryptocurrency)
         use_cancel_all = True
         for symbol in self.marketsToCheck:
-            if self.OE.CTE.fetchOpenOrders(symbol=symbol, pause_time=0, maximum_number_of_attempts=1) != []:
+            if self.OE.CTE.fetchOpenOrders(symbol=symbol, pause_time=0, maximum_number_of_attempts=1, alert=False) != []:
                 use_cancel_all = False
         if use_cancel_all:
             self.OE.CTE.exchange.cancel_all_orders()
         else:
-            self.OE.cancelOrderGroup({'Symbol': self.automationSettings['Symbol']})
+            self.OE.derGroup({'Symbol': self.automationSettings['Symbol']})
         self.previousPositionDict = {'Amount': 0}
         self.currentPositionLog = {'Entry Amount Closed': 0, \
                                    'Exit Amount Closed': 0, \
@@ -419,11 +424,15 @@ class ArrayOrderAutomator:
                                 self.cancelArrayOrder(self.activeArrayOrderNumbers['Long'])
                                 self.createArrayOrder('buy')
                                 self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
-        # III: Long & Short Orders are Checked and Adjusted or Shifted
-                    print('\nAOA : #3a - Long Orders are Checked & Adjusted or Shifted')
-            # IIIa: LONG - This rebuilds or shifts the buy order
+        # III: Stop-Loss Order is Created, Checked and Adjusted
+                    print('\nAOA : #3 - Stop-Loss Order is Created, Checked and Adjusted')
+                    if self.automationSettings['Stop-Loss Strategy']:
+                        self.updateStopLoss()
+        # IV: Long & Short Orders are Checked and Adjusted or Shifted
+                    print('\nAOA : #4a - Long Orders are Checked & Adjusted or Shifted')
+            # IVa: LONG - This rebuilds or shifts the buy order
                     if self.order_created_this_loop:
-                        print('AOA : SKIPPING #3a because an order was already created this run through the loop!')
+                        print('AOA : SKIPPING #4a because an order was already created this run through the loop!')
                     else:
                         if self.activeArrayOrderNumbers['Long'] != '':
                             array_order_parameters = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Array Order Parameters']
@@ -463,7 +472,7 @@ class ArrayOrderAutomator:
 ##                                self.cancelArrayOrder(self.activeArrayOrderNumbers['Long'])
 ##                                self.createArrayOrder('buy')
 ##                                self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
-                        # 3a. Order is remade if the current_price is moving down and away from the Quick Granularity Starting Price
+                        # Order is remade if the current_price is moving down and away from the Quick Granularity Starting Price
                             elif not(self.exiting == 'Short') and self.automationSettings['Quick Granularity Adjustment Gap']:
                                 if self.OE.current_price <= qg_start_price - (array_order_spread * self.automationSettings['Quick Granularity Adjustment Gap']):
                                     print('\nAOA : Adjusting LONG order because the current price $' + str(self.OE.current_price) + ' has moved down to be over ' + \
@@ -473,7 +482,7 @@ class ArrayOrderAutomator:
                                     quick_granularity_spread_dict = self.calculateQuickGranularitySpread('buy', array_order_spread, \
                                                                                                          array_order_starting_price, intended_array_order_starting_price)
                                     self.modifyArrayOrder('buy', quick_granularity_spread_dict)
-                        # 3b. Order is remade if the current_price is moving up towards the Quick Granularity Starting Price
+                        # Order is remade if the current_price is moving up towards the Quick Granularity Starting Price
                             elif not(self.automationSettings['Rebuild Strategy'] == 'No Rebuild') and not(self.exiting == 'Short') and \
                                    (qg_start_price < active_array_order_starting_price) and \
                                    (self.OE.current_price > qg_start_price - (array_order_spread * self.automationSettings['Quick Granularity Berth Adjustment Gap'])):
@@ -552,10 +561,10 @@ class ArrayOrderAutomator:
                                 self.currentPositionDict = self.OE.CTE.getPositions()
                                 self.updateActiveOrders()
                                 self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
-            # IIIb: SHORT - This rebuilds or shifts the sell order
-                    print('\nAOA : #3b - Short Orders are Checked & Adjusted or Shifted')
+            # IVb: SHORT - This rebuilds or shifts the sell order
+                    print('\nAOA : #4b - Short Orders are Checked & Adjusted or Shifted')
                     if self.order_created_this_loop:
-                        print('AOA : SKIPPING #3b because an order was already created this run through the loop!')
+                        print('AOA : SKIPPING #4b because an order was already created this run through the loop!')
                     else:
                         if self.activeArrayOrderNumbers['Short'] != '':
                             array_order_parameters = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Array Order Parameters']
@@ -595,7 +604,7 @@ class ArrayOrderAutomator:
 ##                                self.cancelArrayOrder(self.activeArrayOrderNumbers['Short'])
 ##                                self.createArrayOrder('sell')
 ##                                self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
-                        # 3a. Order is remade if the current_price is moving up and away from the Quick Granularity Starting Price
+                        # Order is remade if the current_price is moving up and away from the Quick Granularity Starting Price
                             elif not(self.exiting == 'Long') and self.automationSettings['Quick Granularity Adjustment Gap']:
                                 if self.OE.current_price >= qg_start_price + (array_order_spread * self.automationSettings['Quick Granularity Adjustment Gap']):
                                     print('\nAOA : Adjusting SHORT order because the current price $' + str(self.OE.current_price) + ' has moved up to be over ' + \
@@ -605,7 +614,7 @@ class ArrayOrderAutomator:
                                     quick_granularity_spread_dict = self.calculateQuickGranularitySpread('sell', array_order_spread, \
                                                                                                          array_order_starting_price, intended_array_order_starting_price)
                                     self.modifyArrayOrder('sell', quick_granularity_spread_dict)
-                        # 3b. Order is remade if the current_price is moving down towards the Quick Granularity Starting Price
+                        # Order is remade if the current_price is moving down towards the Quick Granularity Starting Price
                             elif not(self.automationSettings['Rebuild Strategy'] == 'No Rebuild') and not(self.exiting == 'Long') and \
                                    (qg_start_price > active_array_order_starting_price) and \
                                    (self.OE.current_price < qg_start_price + (array_order_spread * self.automationSettings['Quick Granularity Berth Adjustment Gap'])):
@@ -680,10 +689,9 @@ class ArrayOrderAutomator:
                                     rebuild_info_dict = self.OE.rebuildArrayOrder(self.activeArrayOrderNumbers['Short'], {'Quick Rebuild': True, \
                                                                                                                           'Current Price': self.OE.current_price})
                                 self.currentPositionLog['Entry Amount Rebuilt'] += rebuild_info_dict['Amount Rebuilt']
-        # IV. Position & PNL is Displayed, dicts are Updated, and CSVs are Exported
-                    print('\nAOA : #4 - Position & PNL are Displayed, dicts are Updated, and CSVs are Exported')
+        # V. Position & PNL is Displayed, dicts are Updated, and CSVs are Exported
+                    print('\nAOA : #5 - Position & PNL are Displayed, dicts are Updated, and CSVs are Exported')
                 # This displays our current position & saves the trade history
-                
                     if self.exiting == 'Long':
                         self.updateActiveOrders()
                         print('AOA : ---------------- These two numbers should be the same:')
@@ -779,7 +787,7 @@ class ArrayOrderAutomator:
             self.currentPositionDict['Leverage'] = 5
             self.currentPositionDict['Amount'] = 500
             self.currentPositionDict['Liquidation Price'] = 40000
-            self.currentPositionDict['Stop Loss'] = 41000
+            self.currentPositionDict['Stop-Loss'] = 41000
             self.currentPositionDict['Raw Positions List'] = []
         if self.currentPositionDict['Amount'] < self.previousPositionDict['Amount']:
             self.currentPositionLog['Exit Amount Closed'] += (self.previousPositionDict['Amount'] - self.currentPositionDict['Amount'])
@@ -1011,6 +1019,19 @@ class ArrayOrderAutomator:
             elif symbol == 'DOGE' or symbol == 'DOGE/USD' or symbol == 'DOGE/USDT':
                 granularity = .0001
         return(granularity)
+
+    def calculateStopPrice(self):
+    # To-Do:
+    #   -Enable awareness of "levels"; if a falling stop loss is 50029, make it 49950 instead
+        print('AOA : Calculating Stop-Loss Price...........')
+        if self.currentPositionDict['Side'].lower() == 'buy':
+            starting_price = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Starting Price']
+            stop_price = starting_price * (1 - self.automationSettings['Stop-Loss Spread %'])
+        elif self.currentPositionDict['Side'].lower() == 'sell':
+            starting_price = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price']
+            stop_price = starting_price * (1 + self.automationSettings['Stop-Loss Spread %'])
+        print('AOA : Stop-Loss Price calculated to be $' + str(stop_price))
+        return(stop_price)
                     
 
     def createArrayOrder(self, side):
@@ -1246,9 +1267,9 @@ class ArrayOrderAutomator:
                 print('AOA : ' + side.upper() + ' order created to EXIT ' + self.exiting + ' position!\n')
             else:
                 print('AOA : ' + side.upper() + ' ENTRY order created!\n')
-  # # Position and Active Orders are updated 
-        self.currentPositionDict = self.OE.CTE.getPositions()
+  # # Position and Active Orders are updated
         self.updateActiveOrders()
+        self.currentPositionDict = self.OE.CTE.getPositions()
         self.order_created_this_loop = True
     # If current_side was modified at the beginning because this created a sell order, current_price is reset back to being the 'bid' price instead of 'ask'
         if side == 'sell':
@@ -1327,17 +1348,23 @@ class ArrayOrderAutomator:
         sell_orders = {}
         sell_total_amount = 0
         sell_order_prices = []
+        stop_loss_orders = {}
+        stop_total_amount = 0
         if all_open_orders != []:
         # Orders that are open are accumulated
             for order in all_open_orders:
-                if order['side'] == 'buy':
-                    buy_orders[order['id']] = order
-                    buy_total_amount += float(order['amount'])
-                    buy_order_prices.append(order['price'])
-                elif order['side'] == 'sell':
-                    sell_orders[order['id']] = order
-                    sell_total_amount += float(order['amount'])
-                    sell_order_prices.append(order['price'])
+                if order['type'] == 'Stop':
+                    stop_loss_orders[order['id']] = order
+                    stop_total_amount += float(order['amount'])
+                else:
+                    if order['side'] == 'buy':
+                        buy_orders[order['id']] = order
+                        buy_total_amount += float(order['amount'])
+                        buy_order_prices.append(order['price'])
+                    elif order['side'] == 'sell':
+                        sell_orders[order['id']] = order
+                        sell_total_amount += float(order['amount'])
+                        sell_order_prices.append(order['price'])
         # Missing orders that aren't present in all_open_orders are recorded
             if self.activeArrayOrderNumbers['Long'] != '':
                 for ID in self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Active Orders']:
@@ -1377,6 +1404,9 @@ class ArrayOrderAutomator:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price'] = False
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Ending Price'] = False
                     self.activeArrayOrderNumbers['Short'] = ''
+        # Stop-Loss orders dict is updated
+            self.openStopLossOrders['Open Orders'] = stop_loss_orders
+            self.openStopLossOrders['Total Amount'] = stop_total_amount
         else:
             print('AOA : No active orders!')
             if self.activeArrayOrderNumbers['Long'] != '':
@@ -1499,6 +1529,78 @@ class ArrayOrderAutomator:
                 self.OE.current_price -= .01
             elif symbol == 'DOGE' or symbol == 'DOGE/USD' or symbol == 'DOGE/USDT':
                 self.OE.current_price -= .0001
+
+
+    def updateStopLoss(self):
+        #0. Check all orders and find stop-loss orders - this is done automatically via self.updateActiveOrders()
+        #1. If there is more than one stop-loss order, cancel them all and create the right one
+        #2. If there is just one, check if it is the same one stored in self.stopLossOrder
+        #   2a. If it's not, cancel it and create the right one
+        #   2b. If it is, check its amount and price
+        #       2bi. If either is wrong, cancel it and create the right one
+        #3. If there are none, create the right one
+        #4. Create the right one
+        #5. Check again. If it's not there, loop back to 0.   <------------- Still need to do this
+        #
+        #-Calculating the correct stop-loss price should be its own function. That will make all the checking easier
+        print('AOA : Updating Stop-Loss Order............')
+        expected_stop_price = self.calculateStopPrice()
+        #self.updateActiveOrders()
+        update_complete = False
+        while not(update_complete):
+            if len(self.openStopLossOrders['Open Orders']) > 1:
+                print('AOA : Huh?!?! There were multiple stop-loss orders found! Canceling them them all now...')
+                self.AP.playSound('Tim Allen')
+                for order_ID in self.openStopLossOrders['Open Orders']:
+                    self.CTE.exchange.cancelOrder(order_ID, self.openStopLossOrders['Open Orders'][order_ID]['info']['symbol'])
+                self.stopLossOrder = ''
+            elif len(self.openStopLossOrders['Open Orders']) == 1:
+                stop_loss_order_ID = list(self.openStopLossOrders['Open Orders'])[0]
+                stop_loss_order = self.openStopLossOrders['Open Orders'][stop_loss_order_ID]
+                if stop_loss_order_ID != self.stopLossOrder.get('ID'):
+                    print('AOA : Huh?!?! The ID we have saved for our stop-loss does NOT match the currently active stop-loss order! Canceling it now...')
+                    self.AP.playSound('Tim Allen')
+                    self.CTE.exchange.cancelOrder(stop_loss_order_ID, stop_loss_order['info']['symbol'])
+                    self.stopLossOrder = ''
+                else:
+                    self.stopLossOrder = self.openStopLossOrders['Open Orders'][stop_loss_order_ID]
+                    if self.stopLossOrder['Amount'] != self.currentPositionDict['Amount']:
+                        print('AOA : The amount of our stop-loss ' + str(self.self.stopLossOrder['Amount']) + \
+                              ' does NOT match our position size of ' + str(self.currentPositionDict['Amount']) + '. Canceling it now...')
+                        self.CTE.exchange.cancelOrder(self.stopLossOrder['ID'], self.stopLossOrder['Symbol'])
+                        self.stopLossOrder = ''
+                    elif self.stopLossOrder['Stop Price'] != expected_stop_price:
+                        print('AOA : The price of our stop-loss $' + str(self.stopLossOrder['Stop Price']) + \
+                              ' does NOT match the expected price of $' + str(expected_stop_price) + '. Canceling it now...')
+                        self.CTE.exchange.cancelOrder(self.stopLossOrder['ID'], self.stopLossOrder['Symbol'])
+                        self.stopLossOrder = ''
+                    else:
+                        print('AOA : The currently active stop-loss order matches the currently saved ID, our current position amount, and the expected price!')
+                        print('       |------ Current Order ------ | ------ Expected Values ------')
+                        print('ID:    ' + stop_loss_order_ID + ' | ' + self.stopLossOrder['ID'])
+                        print('Amount:' + str(self.stopLossOrder['Amount']) + ' | ' + str(self.currentPositionDict['Amount']))
+                        print('Price: ' + str(self.stopLossOrder['Price']) + ' | ' + str(expected_stop_price))
+            else:
+                print('AOA : No stop-loss order found!')
+                self.stopLossOrder = ''
+            if self.stopLossOrder == '':
+                if self.exiting:
+                    print('AOA : Creating a new stop-loss order...........')
+                    self.stopLossOrder = self.OE.createStopLossOrder(expected_stop_price, current_price=self.OE.current_price, position_dict=self.currentPositionDict)
+                    print('AOA : Stop-loss order created!')
+                    self.updateActiveOrders()
+                    self.currentPositionDict = self.OE.CTE.getPositions()
+                    self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
+                    update_complete = False
+                else:
+                    print('AOA : We are NOT in EXIT mode, so no stop-loss order is being created.')
+                    update_complete = True
+            else:
+                print("AOA : Stop-Loss Order Update finished! It's a " + self.stopLossOrder['Side'] + \
+                      " order for " + str(self.stopLossOrder['Amount']) + \" at $" + str(self.stopLossOrder['Stop Price']))
+                update_complete = True
+
+                
         
 
     def inCaseOfPositionClosed(self):
