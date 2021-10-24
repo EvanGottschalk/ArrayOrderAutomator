@@ -374,9 +374,9 @@ class ConnectToExchange:
         positions_dict['Amount'] = float(positions[0]['size'])
         positions_dict['Liqudation Price'] = float(positions[0]['liquidationPrice'])
         try:
-            positions_dict['Stop Loss'] = float(positions[0]['stopLoss'])
+            positions_dict['Stop-Loss'] = float(positions[0]['stopLoss'])
         except:
-            positions_dict['Stop Loss'] = False
+            positions_dict['Stop-Loss'] = False
         positions_dict['Raw Positions List'] = positions
         if not(self.silent_mode):
             print('CTE : Current POSITION fetched')
@@ -1248,6 +1248,28 @@ class ConnectToExchange:
         if not(self.silent_mode):
             print('CTE : Open orders fetched!')
         return(open_orders)
+
+    def checkOrder(self, order_id, symbol='BTCUSD', exchange=None):
+        if exchange:
+            self.connect(exchange)
+        elif not(self.exchange):
+            self.connect()
+        order = self.exchange.fetchOrder(order_id, symbol)
+        return(order)
+
+    def prettifyOrder(self, order):
+        if order['type'] == 'Stop':
+            order = {'Raw': order, \
+                     'ID': order['id'], \
+                     'Symbol': order['info']['symbol'], \
+                     'Side': order['side'], \
+                     'Order Type': 'stop', \
+                     'Closed PNL': float(order['info']['closedPnl']), \
+                     'Amount': int(order['amount']), \
+                     'Price': float(order['stopPrice']), \
+                     'Stop Price': float(order['stopPrice']), \
+                     'Time Created': self.GCT.getDateTimeString()}
+        return(order)
 
 # This function adds OHLCV information to an ever growing "master" OHLCV
 # This is useful because most exchanges limit the number of data points that one can retrieve
