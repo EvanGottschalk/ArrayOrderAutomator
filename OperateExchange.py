@@ -1308,16 +1308,7 @@ class OperateExchange:
             order = self.executeOrder(order_settings_dict, params)
             print('OE : Stop-Loss order created!')
         if order:
-            order = {'Raw': order, \
-                     'ID': order['id'], \
-                     'Symbol': symbol, \
-                     'Side': side, \
-                     'Order Type': 'stop', \
-                     'Closed PNL': 0, \
-                     'Amount': amount, \
-                     'Price': stop_price, \
-                     'Stop Price': stop_price, \
-                     'Time Created': self.CTE.GCT.getDateTimeString()}
+            order = self.CTE.prettifyOrder(order)
         return(order)
             
             
