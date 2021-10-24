@@ -126,6 +126,8 @@ class OperateExchange:
             if not(symbol_input in self.CTE.availableSymbols[self.CTE.exchange_name]):
                 if symbol_input == 'DOGE/USD':
                     self.CTE.availableSymbols[self.CTE.exchange_name].append('DOGE/USD')
+                elif symbol_input == 'BTCUSD':
+                    self.CTE.availableSymbols[self.CTE.exchange_name].append('BTCUSD')
                 else:
                     symbol_input = False
         except:
@@ -854,7 +856,10 @@ class OperateExchange:
                 weighted_order_list = new_weighted_order_list
                 number_of_orders = len(array_of_orders)
                 # Slow Granularity Multiplier is applied to increase the spread between orders that come after the Quick Granularity End %
-                slow_granularity_multiplier = 5
+                if side == 'buy':
+                    slow_granularity_multiplier = 4
+                else:
+                    slow_granularity_multiplier = 3
                 if slow_granularity_multiplier:
                     price_multiplier = slow_granularity_multiplier - 1
                     new_array_of_orders = []
@@ -883,165 +888,173 @@ class OperateExchange:
                         new_weighted_order_list.append(new_order['Amount'] * new_order['Price'])
                 array_of_orders = new_array_of_orders
                 weighted_order_list = new_weighted_order_list
-            # End Spread Multiplier is applied
-            if end_spread_multiplier:
-                price_multiplier = end_spread_multiplier - 1
+            try:
+                # End Spread Multiplier is applied
+                if end_spread_multiplier:
+                    price_multiplier = end_spread_multiplier - 1
+                    new_array_of_orders = []
+                    new_weighted_order_list = []
+                    order_count = 0
+                    normal_spread_order_count = 0
+    ##                    slow_granularity_spread = spread * (1 - qg_end_percent)
+    ##                    print('slow_granularity_spread', slow_granularity_spread)
+    ##                    print('qg_end_price', qg_end_price)
+                    if side.lower() == 'buy':
+                        end_spread_start_price = price - (end_spread_start_percent * spread)
+                        end_spread_end_price = price - spread
+                        end_spread = end_spread_start_price - end_spread_end_price
+                        for order in array_of_orders:
+                            order_count += 1
+                            new_order = order
+    ##                    print(order['Price'], order['Amount'])
+                            if order['Price'] >= end_spread_start_price:
+                                order_count += 1
+                            else:
+                                percent_into_end_spread = (end_spread_start_price - order['Price']) / end_spread
+    ##                                print('percent_into_end_spread', percent_into_end_spread)
+                                price_modification = price_multiplier * (percent_into_end_spread * end_spread)
+                                new_order['Price'] -= price_modification
+                            new_array_of_orders.append(new_order)
+                            new_weighted_order_list.append(new_order['Amount'] * new_order['Price'])
+                    elif side.lower() == 'sell':
+                        end_spread_start_price = price + (end_spread_start_percent * spread)
+                        end_spread_end_price = price + spread
+                        end_spread = end_spread_end_price - end_spread_start_price
+                        for order in array_of_orders:
+                            order_count += 1
+                            new_order = order
+    ##                        print(order['Price'], order['Amount'])
+                            if order['Price'] <= end_spread_start_price:
+                                order_count += 1
+                            else:
+                                percent_into_end_spread = (order['Price'] - end_spread_start_price) / end_spread
+    ##                                print('percent_into_end_spread', percent_into_end_spread)
+                                price_modification = price_multiplier * (percent_into_end_spread * end_spread)
+                                new_order['Price'] += price_modification
+                            new_array_of_orders.append(new_order)
+                            new_weighted_order_list.append(new_order['Amount'] * new_order['Price'])
+                    array_of_orders = new_array_of_orders
+                    weighted_order_list = new_weighted_order_list
+            # This reorganizes the Array Order so that smaller orders are always closer to the begining of the array than the end
                 new_array_of_orders = []
                 new_weighted_order_list = []
-                order_count = 0
-                normal_spread_order_count = 0
-##                    slow_granularity_spread = spread * (1 - qg_end_percent)
-##                    print('slow_granularity_spread', slow_granularity_spread)
-##                    print('qg_end_price', qg_end_price)
-                if side.lower() == 'buy':
-                    end_spread_start_price = price - (end_spread_start_percent * spread)
-                    end_spread_end_price = price - spread
-                    end_spread = end_spread_start_price - end_spread_end_price
+                for order_index in range(len(array_of_orders)):
+                    if order_index > 0:
+                        if array_of_orders[order_index]['Amount'] < array_of_orders[order_index - 1]['Amount']:
+                            larger_amount = array_of_orders[order_index - 1]['Amount']
+                            array_of_orders[order_index - 1]['Amount'] = array_of_orders[order_index]['Amount']
+                            array_of_orders[order_index]['Amount'] = larger_amount
+            # If Maximum Amount is being used, this removes orders past a certain price point so the total amount of the array order is a specific amount
+                if maximum_amount:
+    ##                sum_of_order_amounts = 0
+    ##                total_order_amount = 0
+    ##                accumulate_orders = True
+    ##                new_array_of_orders = []
+    ##                new_weighted_order_list = []
+    ##                for individual_order in array_of_orders:
+    ##                    if accumulate_orders:
+    ##                        sum_of_order_amounts += individual_order['Amount']
+    ##                        if sum_of_order_amounts < maximum_amount:
+    ##                            new_array_of_orders.append(individual_order)
+    ##                            total_order_amount += individual_order['Amount']
+    ##                            new_weighted_order_list.append(individual_order['Amount'] * individual_order['Price'])
+    ##                        elif sum_of_order_amounts == maximum_amount:
+    ##                            accumulate_orders = False
+    ##                            new_array_of_orders.append(individual_order)
+    ##                            total_order_amount += individual_order['Amount']
+    ##                            new_weighted_order_list.append(individual_order['Amount'] * individual_order['Price'])
+    ##                        elif sum_of_order_amounts > maximum_amount:
+    ##                            accumulate_orders = False
+    ##                            ending_order_modified = 1
+    ##                            extra_amount = sum_of_order_amounts - maximum_amount
+    ##                            individual_order['Amount'] -= extra_amount
+    ##                            total_order_amount += individual_order['Amount']
+    ##                            new_array_of_orders.append(individual_order)
+    ##                            new_weighted_order_list.append(individual_order['Amount'] * individual_order['Price'])
+    ##                array_of_orders = new_array_of_orders
+    ##                weighted_order_list = new_weighted_order_list
+    ##                number_of_orders = len(array_of_orders)
+    ##                print('OE : Maximum Amount was applied and now the total order amount is ' + str(total_order_amount) + ' spread across ' + str(number_of_orders) + ' orders')
+                    newArrayOrderInfo = self.applyMaximumAmount(array_of_orders, maximum_amount)
+                    total_order_amount = newArrayOrderInfo['Total Order Amount']
+                    number_of_orders = newArrayOrderInfo['Total Number of Orders']
+                    array_of_orders = newArrayOrderInfo['Array of Orders']
+                    weighted_order_list = newArrayOrderInfo['Weighted Order List']
+                    effective_amount = maximum_amount
+                # This will readjust the Maximum Amount so that the amounts of the orders that are on the wrong side of the current price and won't be executed
+                # can be added to the Maximum Amount. This will make it so that the sum of the amount of orders that get placed is equal to the Maximum Amount
+                    if readjust_to_execute_maximum_amount:
+                        total_amount_too_small = True
+                        last_sum_of_inexecutable_amounts = False
+                        while total_amount_too_small:
+                            sum_of_inexecutable_amounts = 0
+                            if self.orderSettings['Side'] == 'buy':
+                                for individual_order in array_of_orders:
+                                    if individual_order['Price'] > self.current_price:
+                                        sum_of_inexecutable_amounts += individual_order['Amount']
+                            elif self.orderSettings['Side'] == 'sell':
+                                for individual_order in array_of_orders:
+                                    if individual_order['Price'] < self.current_price:
+                                        sum_of_inexecutable_amounts += individual_order['Amount']
+                            if sum_of_inexecutable_amounts > 0:
+                                maximum_amount += sum_of_inexecutable_amounts
+                                self.arrayOrderSettings['Maximum Amount'] = maximum_amount
+                                newArrayOrderInfo = self.applyMaximumAmount(array_of_orders, maximum_amount)
+                                total_order_amount = newArrayOrderInfo['Total Order Amount']
+                                number_of_orders = newArrayOrderInfo['Total Number of Orders']
+                                array_of_orders = newArrayOrderInfo['Array of Orders']
+                                weighted_order_list = newArrayOrderInfo['Weighted Order List']
+                                print('OE : Maximum Amount READJUSTED to ' + str(maximum_amount) + ' from ' + str(true_maximum_amount) + \
+                                      ' because orders summing to ' + str(sum_of_inexecutable_amounts) + ' cannot to be placed because they are on the wrong side of the current price.')
+            ##                else:
+            ##                    total_amount_too_small = False
+                            if sum_of_inexecutable_amounts == last_sum_of_inexecutable_amounts:
+                                total_amount_too_small = False
+                            last_sum_of_inexecutable_amounts = sum_of_inexecutable_amounts
+            # Slope - this changes the slope of the array order. NOTE - This changes the amount of the array order!
+                if slope:
+                    new_weighted_order_list = []
+                    new_total_order_amount = 0
                     for order in array_of_orders:
-                        order_count += 1
-                        new_order = order
-##                    print(order['Price'], order['Amount'])
-                        if order['Price'] >= end_spread_start_price:
-                            order_count += 1
-                        else:
-                            percent_into_end_spread = (end_spread_start_price - order['Price']) / end_spread
-##                                print('percent_into_end_spread', percent_into_end_spread)
-                            price_modification = price_multiplier * (percent_into_end_spread * end_spread)
-                            new_order['Price'] -= price_modification
-                        new_array_of_orders.append(new_order)
-                        new_weighted_order_list.append(new_order['Amount'] * new_order['Price'])
-                elif side.lower() == 'sell':
-                    end_spread_start_price = price + (end_spread_start_percent * spread)
-                    end_spread_end_price = price + spread
-                    end_spread = end_spread_end_price - end_spread_start_price
-                    for order in array_of_orders:
-                        order_count += 1
-                        new_order = order
-##                        print(order['Price'], order['Amount'])
-                        if order['Price'] <= end_spread_start_price:
-                            order_count += 1
-                        else:
-                            percent_into_end_spread = (order['Price'] - end_spread_start_price) / end_spread
-##                                print('percent_into_end_spread', percent_into_end_spread)
-                            price_modification = price_multiplier * (percent_into_end_spread * end_spread)
-                            new_order['Price'] += price_modification
-                        new_array_of_orders.append(new_order)
-                        new_weighted_order_list.append(new_order['Amount'] * new_order['Price'])
-                array_of_orders = new_array_of_orders
-                weighted_order_list = new_weighted_order_list
-        # This reorganizes the Array Order so that smaller orders are always closer to the begining of the array than the end
-            new_array_of_orders = []
-            new_weighted_order_list = []
-            for order_index in range(len(array_of_orders)):
-                if order_index > 0:
-                    if array_of_orders[order_index]['Amount'] < array_of_orders[order_index - 1]['Amount']:
-                        larger_amount = array_of_orders[order_index - 1]['Amount']
-                        array_of_orders[order_index - 1]['Amount'] = array_of_orders[order_index]['Amount']
-                        array_of_orders[order_index]['Amount'] = larger_amount
-        # If Maximum Amount is being used, this removes orders past a certain price point so the total amount of the array order is a specific amount
-            if maximum_amount:
-##                sum_of_order_amounts = 0
-##                total_order_amount = 0
-##                accumulate_orders = True
-##                new_array_of_orders = []
-##                new_weighted_order_list = []
-##                for individual_order in array_of_orders:
-##                    if accumulate_orders:
-##                        sum_of_order_amounts += individual_order['Amount']
-##                        if sum_of_order_amounts < maximum_amount:
-##                            new_array_of_orders.append(individual_order)
-##                            total_order_amount += individual_order['Amount']
-##                            new_weighted_order_list.append(individual_order['Amount'] * individual_order['Price'])
-##                        elif sum_of_order_amounts == maximum_amount:
-##                            accumulate_orders = False
-##                            new_array_of_orders.append(individual_order)
-##                            total_order_amount += individual_order['Amount']
-##                            new_weighted_order_list.append(individual_order['Amount'] * individual_order['Price'])
-##                        elif sum_of_order_amounts > maximum_amount:
-##                            accumulate_orders = False
-##                            ending_order_modified = 1
-##                            extra_amount = sum_of_order_amounts - maximum_amount
-##                            individual_order['Amount'] -= extra_amount
-##                            total_order_amount += individual_order['Amount']
-##                            new_array_of_orders.append(individual_order)
-##                            new_weighted_order_list.append(individual_order['Amount'] * individual_order['Price'])
-##                array_of_orders = new_array_of_orders
-##                weighted_order_list = new_weighted_order_list
-##                number_of_orders = len(array_of_orders)
-##                print('OE : Maximum Amount was applied and now the total order amount is ' + str(total_order_amount) + ' spread across ' + str(number_of_orders) + ' orders')
-                newArrayOrderInfo = self.applyMaximumAmount(array_of_orders, maximum_amount)
-                total_order_amount = newArrayOrderInfo['Total Order Amount']
-                number_of_orders = newArrayOrderInfo['Total Number of Orders']
-                array_of_orders = newArrayOrderInfo['Array of Orders']
-                weighted_order_list = newArrayOrderInfo['Weighted Order List']
-                effective_amount = maximum_amount
-            # This will readjust the Maximum Amount so that the amounts of the orders that are on the wrong side of the current price and won't be executed
-            # can be added to the Maximum Amount. This will make it so that the sum of the amount of orders that get placed is equal to the Maximum Amount
-                if readjust_to_execute_maximum_amount:
-                    total_amount_too_small = True
-                    last_sum_of_inexecutable_amounts = False
-                    while total_amount_too_small:
-                        sum_of_inexecutable_amounts = 0
-                        if self.orderSettings['Side'] == 'buy':
-                            for individual_order in array_of_orders:
-                                if individual_order['Price'] > self.current_price:
-                                    sum_of_inexecutable_amounts += individual_order['Amount']
-                        elif self.orderSettings['Side'] == 'sell':
-                            for individual_order in array_of_orders:
-                                if individual_order['Price'] < self.current_price:
-                                    sum_of_inexecutable_amounts += individual_order['Amount']
-                        if sum_of_inexecutable_amounts > 0:
-                            maximum_amount += sum_of_inexecutable_amounts
-                            self.arrayOrderSettings['Maximum Amount'] = maximum_amount
-                            newArrayOrderInfo = self.applyMaximumAmount(array_of_orders, maximum_amount)
-                            total_order_amount = newArrayOrderInfo['Total Order Amount']
-                            number_of_orders = newArrayOrderInfo['Total Number of Orders']
-                            array_of_orders = newArrayOrderInfo['Array of Orders']
-                            weighted_order_list = newArrayOrderInfo['Weighted Order List']
-                            print('OE : Maximum Amount READJUSTED to ' + str(maximum_amount) + ' from ' + str(true_maximum_amount) + \
-                                  ' because orders summing to ' + str(sum_of_inexecutable_amounts) + ' cannot to be placed because they are on the wrong side of the current price.')
-        ##                else:
-        ##                    total_amount_too_small = False
-                        if sum_of_inexecutable_amounts == last_sum_of_inexecutable_amounts:
-                            total_amount_too_small = False
-                        last_sum_of_inexecutable_amounts = sum_of_inexecutable_amounts
-        # Slope - this changes the slope of the array order. NOTE - This changes the amount of the array order!
-            if slope:
-                new_weighted_order_list = []
-                new_total_order_amount = 0
-                for order in array_of_orders:
-                    new_amount = int(slope * order['Amount'])
-                    if new_amount < order['Amount']:
-                        new_amount += 1
-                    order['Amount'] = new_amount
-                    new_total_order_amount += new_amount
-                    new_weighted_order_list.append(new_amount * order['Price'])
-                weighted_order_list = new_weighted_order_list
-                total_order_amount = new_total_order_amount
-    ## No settings changed past this point. Orders are saved, displayed & executed. No settings changed past this point
-        # Assigns values to arrayOrderParameters dict
-            self.arrayOrderParameters['Number of Orders'] = len(array_of_orders)
-            self.arrayOrderParameters['Total Order Amount'] = total_order_amount
-        # When a Maximum Amount is used, orders are created in reverse, so maximum_amount affects whether the lowest-priced order is at the start or end
-            if (self.orderSettings['Side'] == 'sell' and not(maximum_amount)) or (self.orderSettings['Side'] == 'buy' and maximum_amount):
-                self.arrayOrderParameters['Lowest Price Order Amount'] = array_of_orders[0]['Amount']
-                self.arrayOrderParameters['Lowest Price Order Price'] = array_of_orders[0]['Price']
-                self.arrayOrderParameters['Highest Price Order Amount'] = array_of_orders[len(array_of_orders) - 1]['Amount']
-                self.arrayOrderParameters['Highest Price Order Price'] = array_of_orders[len(array_of_orders) - 1]['Price']
-            elif (self.orderSettings['Side'] == 'buy' and not(maximum_amount)) or (self.orderSettings['Side'] == 'sell' and maximum_amount):
-                self.arrayOrderParameters['Lowest Price Order Amount'] = array_of_orders[len(array_of_orders) - 1]['Amount']
-                self.arrayOrderParameters['Lowest Price Order Price'] = array_of_orders[len(array_of_orders) - 1]['Price']
-                self.arrayOrderParameters['Highest Price Order Amount'] = array_of_orders[0]['Amount']
-                self.arrayOrderParameters['Highest Price Order Price'] = array_of_orders[0]['Price']
-            self.arrayOrderParameters['Entry at Full Execution'] = sum(weighted_order_list) / total_order_amount
-            self.arrayOrderParameters['Individual Order Settings'] = array_of_orders
-            self.arrayOrderParameters['Effective Amount'] = effective_amount
-            try:
-                self.arrayOrderParameters['Quick Granularity Start Price'] = qg_start_price
-                self.arrayOrderParameters['Quick Granularity End Price'] = qg_end_price
-            except:
-                self.arrayOrderParameters['Quick Granularity Start Price'] = False
-                self.arrayOrderParameters['Quick Granularity End Price'] = False
+                        new_amount = int(slope * order['Amount'])
+                        if new_amount < order['Amount']:
+                            new_amount += 1
+                        order['Amount'] = new_amount
+                        new_total_order_amount += new_amount
+                        new_weighted_order_list.append(new_amount * order['Price'])
+                    weighted_order_list = new_weighted_order_list
+                    total_order_amount = new_total_order_amount
+        ## No settings changed past this point. Orders are saved, displayed & executed. No settings changed past this point
+            # Assigns values to arrayOrderParameters dict
+                self.arrayOrderParameters['Number of Orders'] = len(array_of_orders)
+                self.arrayOrderParameters['Total Order Amount'] = total_order_amount
+            # When a Maximum Amount is used, orders are created in reverse, so maximum_amount affects whether the lowest-priced order is at the start or end
+                if (self.orderSettings['Side'] == 'sell' and not(maximum_amount)) or (self.orderSettings['Side'] == 'buy' and maximum_amount):
+                    self.arrayOrderParameters['Lowest Price Order Amount'] = array_of_orders[0]['Amount']
+                    self.arrayOrderParameters['Lowest Price Order Price'] = array_of_orders[0]['Price']
+                    self.arrayOrderParameters['Highest Price Order Amount'] = array_of_orders[len(array_of_orders) - 1]['Amount']
+                    self.arrayOrderParameters['Highest Price Order Price'] = array_of_orders[len(array_of_orders) - 1]['Price']
+                elif (self.orderSettings['Side'] == 'buy' and not(maximum_amount)) or (self.orderSettings['Side'] == 'sell' and maximum_amount):
+                    self.arrayOrderParameters['Lowest Price Order Amount'] = array_of_orders[len(array_of_orders) - 1]['Amount']
+                    self.arrayOrderParameters['Lowest Price Order Price'] = array_of_orders[len(array_of_orders) - 1]['Price']
+                    self.arrayOrderParameters['Highest Price Order Amount'] = array_of_orders[0]['Amount']
+                    self.arrayOrderParameters['Highest Price Order Price'] = array_of_orders[0]['Price']
+                self.arrayOrderParameters['Entry at Full Execution'] = sum(weighted_order_list) / total_order_amount
+                self.arrayOrderParameters['Individual Order Settings'] = array_of_orders
+                self.arrayOrderParameters['Effective Amount'] = effective_amount
+                try:
+                    self.arrayOrderParameters['Quick Granularity Start Price'] = qg_start_price
+                    self.arrayOrderParameters['Quick Granularity End Price'] = qg_end_price
+                except:
+                    self.arrayOrderParameters['Quick Granularity Start Price'] = False
+                    self.arrayOrderParameters['Quick Granularity End Price'] = False
+            except Exception as error:
+                self.CTE.inCaseOfError(**{'error': error, \
+                                          'description': 'when belf becomes welf', \
+                                          'program': 'OE', \
+                                          'line_number': traceback.format_exc().split('line ')[1].split(',')[0], \
+                                          'number_of_attempts': 1})
+                belf = welf
         # Displays text describing current parameters
             print('\nOE : - Array Order Parameters -')
             for key in self.arrayOrderParameters:
@@ -1259,7 +1272,72 @@ class OperateExchange:
         else:
             return([self.orderSettings, False])
 
+
+    # This function creates triggerable market order for reducing or completely closing a position
+    def createStopLossOrder(self, stop_price, symbol='BTCUSD', side='opposite_of_position', amount='current_position_size', position_dict=None, current_price=None):
+        print('OE : Creating a Stop-Loss order at $' + str(stop_price))
+        if side == 'opposite_of_position':
+            if not(position_dict):
+                position_dict = self.CTE.getPositions()
+            if position_dict['Side'].lower() == 'buy':
+                side = 'sell'
+            else:
+                side = 'buy'
+        if not(current_price):
+            current_price = self.CTE.fetchCurrentPrice(symbol)
+        if stop_price >= current_price and side == 'sell':
+            print('OE : Input ERROR! The stop_price $' + str(stop_price) + ' is greater than the current price of $' + str(current_price) + \
+                  ', but the SIDE of the order is SELL! That makes it a TAKE PROFIT, not Stop-Loss!')
+            order = None
+        elif stop_price <= current_price and side == 'buy':
+            print('OE : Input ERROR! The stop_price $' + str(stop_price) + ' is less than the current price of $' + str(current_price) + \
+                  ', but the SIDE of the order is BUY! That makes it a TAKE PROFIT, not Stop-Loss!')
+            order = None
+        else:
+            if amount == 'current_position_size':
+                if not(position_dict):
+                    position_dict = self.CTE.getPositions()
+                amount = position_dict['Amount']
+            order_settings_dict = {'Symbol': symbol, \
+                                   'Order Type': 'market', \
+                                   'Side': side, \
+                                   'Amount': amount}
+            params = {'ordType':'Stop', \
+                      'triggerType':'ByLastPrice', \
+                      'stopPrice': stop_price}
+            order = self.executeOrder(order_settings_dict, params)
+            print('OE : Stop-Loss order created!')
+        if order:
+            order = {'Raw': order, \
+                     'ID': order['id'], \
+                     'Symbol': symbol, \
+                     'Side': side, \
+                     'Order Type': 'stop', \
+                     'Closed PNL': 0, \
+                     'Amount': amount, \
+                     'Price': stop_price, \
+                     'Stop Price': stop_price, \
+                     'Time Created': self.CTE.GCT.getDateTimeString()}
+        return(order)
+            
+            
+            
+
+
+    # This function creates a limit order that, when filled, will automatically have a Stop-Loss price to close the order
+##    def createStopLimitOrder(self):
+##    This function needs to be fleshed out. Below is the basic code
+##    !!!!!! The below code to actually EXECUTE the order should be moved to executeOrder()
+##        exchange.createOrder(symbol='BTCUSD', \
+##                             type='limit', \
+##                             side='buy', \
+##                             amount=1, \
+##                             price=63000, \
+##                             params={'timeInForce':'PostOnly', 'stopLossEp': 610000000})
+
+
     def validateOrder(self, *args):
+# This function still needs to be fleshed out
         if type(args[0]) == list:
             array_of_orders = args[0]
         elif len(args) > 1:
@@ -1331,13 +1409,20 @@ class OperateExchange:
         return(self.arrayOrderLedger[array_order_number])
 
     
-    def executeOrder(self, order_settings_dict):
-        order = self.CTE.exchange.createOrder(symbol=order_settings_dict['Symbol'], \
-                                          type=order_settings_dict['Order Type'], \
-                                          side=order_settings_dict['Side'], \
-                                          amount=order_settings_dict['Amount'], \
-                                          price=order_settings_dict['Price'], \
-                                          params={'timeInForce':'PostOnly'})
+    def executeOrder(self, order_settings_dict, params={}):
+        params['timeInForce'] = 'PostOnly'
+        # this `if` should be replaced with a more robust Contract vs. Spot feature
+        
+        if order_settings_dict['Symbol'] == 'BTC/USD':
+            order_settings_dict['Symbol'] = 'BTCUSD'
+        final_order_settings = {'symbol': order_settings_dict['Symbol'], \
+                                'type': order_settings_dict['Order Type'], \
+                                'side': order_settings_dict['Side'], \
+                                'amount': order_settings_dict['Amount'], \
+                                'params': params}
+        if order_settings_dict.get('Price'):
+            final_order_settings['price'] = order_settings_dict['Price']
+        order = self.CTE.exchange.createOrder(**final_order_settings)
         self.confirmation = False
         return(order)
 
@@ -1391,7 +1476,7 @@ class OperateExchange:
         new_inactive_order_settings = []
         new_order_settings_by_ID = {}
         new_total_amount = 0
-        all_open_orders = self.CTE.fetchOpenOrders({'Symbol': array_order_symbol})
+        all_open_orders = self.CTE.fetchOpenOrders(symbol=array_order_symbol)
         open_order_IDs = []
         for order in all_open_orders:
             open_order_IDs.append(order['id'])
@@ -1671,7 +1756,7 @@ class OperateExchange:
             if prefetched_open_orders:
                 all_open_orders = prefetched_open_orders
             else:
-                all_open_orders = self.CTE.fetchOpenOrders({'Symbol': symbol})
+                all_open_orders = self.CTE.fetchOpenOrders(symbol=symbol)
             open_order_IDs = []
             for order in all_open_orders:
                 open_order_IDs.append(order['id'])
@@ -1746,12 +1831,14 @@ class OperateExchange:
             else:
                 print('OE : FAILED to CANCEL Array Order because it is an empty list!')
         for order in array_of_orders:
+            if order['symbol'] == 'BTC/USD':
+                symbol = 'BTCUSD'
             try:
-                order = self.CTE.exchange.cancelOrder(order['id'], order['symbol'])
+                order = self.CTE.exchange.cancelOrder(order['id'], symbol)
             except:
                 #print('OE : Missing Order while canceling an array order: ' + str(order['id']))
                 try:
-                    order = self.CTE.exchange.fetchOrder(order['id'], order['symbol'])
+                    order = self.CTE.exchange.fetchOrder(order['id'], symbol)
                 # This adds the PNL to the history if the missing order was closed
                     if (order['status'] == 'closed') and (order['filled'] > 0):
                         self.recordClosedOrder(order)
@@ -1782,7 +1869,7 @@ class OperateExchange:
         open_orders = False
         while not(open_orders):
             try:
-                open_orders = self.CTE.fetchOpenOrders({'Symbol': symbol})
+                open_orders = self.CTE.fetchOpenOrders(symbol=symbol)
                 if open_orders == []:
                     open_orders = 'empty list'
             except:
@@ -1863,7 +1950,7 @@ class OperateExchange:
             timeframe = '1D'
         OHLCVs = self.CTE.exchange.fetchOHLCV(symbol, timeframe, limit=10)
         if pd:
-            OHLCVs_dataframe = pd.DataFrame(OHLCVs, columns = ['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
+            OHLCVs_dataframe = pd.DataFrame(OHLCVs, columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
         return(OHLCVs_dataframe)
 
 # This will create the OperateExchange class in a non-local scope, making it more secure
