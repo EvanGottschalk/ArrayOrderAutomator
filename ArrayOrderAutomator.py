@@ -38,7 +38,7 @@ class ArrayOrderAutomator:
                                       'Session Total PNL': ''}
         self.automationSettings = {'Account': 'Main', \
                                    'Symbol': 'BTC/USD', \
-                                   'Number of Entry Orders': 60, \
+                                   'Number of Entry Orders': 80, \
                                                             #65, \
                                    'Exit Strategy': 'Profit at Entry', \
                                    # ^ This determines how the orders that close positions are calculated
@@ -57,18 +57,18 @@ class ArrayOrderAutomator:
                                    'Entry Style': 'Linear', \
                                    'Exit Style': 'Linear', \
                                    'Quick Granularity Intensity': 1, \
-                                   'Long Entry Spread %': .0175, \
-                                   'Short Entry Spread %': .02, \
+                                   'Long Entry Spread %': .0215, \
+                                   'Short Entry Spread %': .0215, \
                                    'Long Exit Spread %': .01, \
                                    'Short Exit Spread %': .01, \
                                    'Stop-Loss Spread %': .043, \
-                                   'Stop-Loss Modifier %': .00125, \
+                                   'Stop-Loss Modifier %': .00050, \
                                    # 15% seem to be the max change possible in a very short period
                                    'Refresh Rate': 20, \
                                    'Long Shift Gap': 60, \
                                    'Short Shift Gap': 60, \
-                                   'Long Entry Amount': 3000, \
-                                   'Short Entry Amount': 2800, \
+                                   'Long Entry Amount': 9000, \
+                                   'Short Entry Amount': 8500, \
                                    'Exit Amount': 5, \
                                    #^ This could also be a % of the Long or Short Amount (side being determined by the side of the position)
                                    #maybe get rid of Exit Amount and just use 0 - always treat the side you're on differently from the other
@@ -122,6 +122,10 @@ class ArrayOrderAutomator:
                                     'Liqudation Price': 1, \
                                     'Stop-Loss': 0, \
                                     'Raw Positions List': []}
+        self.latestUpdateTimestamps = {'Current Price': '', \
+                                       'Current Position': '', \
+                                       'Stop-Loss Order': '', \
+                                       'Active Orders': ''}
         self.marketsToCheck = ['DOGE/USD', 'ETH/USD', 'LTC/USD']
         self.main_loop = True
         self.exiting = False
@@ -453,8 +457,10 @@ class ArrayOrderAutomator:
                             print('array_order_starting_price', array_order_starting_price)
                             print('intended_array_order_starting_price', intended_array_order_starting_price)
                         # This shifts the order if the price has moved too far
-                            if self.currentPositionDict['Side'].lower() != 'buy' and (self.OE.current_price - self.automationSettings['Long Shift Gap'] > array_order_starting_price) and \
-                               (self.currentPositionDict['Entry Price'] - self.automationSettings['Long Shift Gap'] > array_order_starting_price):
+                            if self.currentPositionDict['Side'].lower() != 'buy' and \
+                               (self.OE.current_price - self.automationSettings['Long Shift Gap'] > array_order_starting_price) and \
+                               ((self.currentPositionDict['Entry Price'] - self.automationSettings['Long Shift Gap'] > array_order_starting_price) or \
+                               (self.currentPositionDict['Entry Price'] == 0)):
                                 print('\nAOA : Shifting LONG order because the current price $' + str(self.OE.current_price) + ' is more than ' + \
                                       str(self.automationSettings['Long Shift Gap']) + \
                                       ' away from the array order entry price $' + str(array_order_starting_price))
@@ -585,8 +591,10 @@ class ArrayOrderAutomator:
                             print('array_order_starting_price', array_order_starting_price)
                             print('intended_array_order_starting_price', intended_array_order_starting_price)
                         # This shifts the order if the price has moved too far
-                            if self.currentPositionDict['Side'].lower() != 'sell' and (self.OE.current_price + self.automationSettings['Short Shift Gap'] < array_order_starting_price) and \
-                               (self.currentPositionDict['Entry Price'] + self.automationSettings['Short Shift Gap'] < array_order_starting_price):
+                            if self.currentPositionDict['Side'].lower() != 'sell' and \
+                               (self.OE.current_price + self.automationSettings['Short Shift Gap'] < array_order_starting_price) and \
+                               ((self.currentPositionDict['Entry Price'] + self.automationSettings['Short Shift Gap'] < array_order_starting_price) or \
+                               (self.currentPositionDict['Entry Price'] == 0)):
                                 print('\nAOA : Shifting SHORT order because the current price $' + str(self.OE.current_price) + ' is more than ' \
                                       + str(self.automationSettings['Short Shift Gap']) + \
                                       ' away from the array order entry price $' + str(array_order_starting_price))
@@ -1568,22 +1576,12 @@ class ArrayOrderAutomator:
 
 
     def updateStopLoss(self):
-        #0. Check all orders and find stop-loss orders - this is done automatically via self.updateActiveOrders()
-        #1. If there is more than one stop-loss order, cancel them all and create the right one
-        #2. If there is just one, check if it is the same one stored in self.stopLossOrder
-        #   2a. If it's not, cancel it and create the right one
-        #   2b. If it is, check its amount and price
-        #       2bi. If either is wrong, cancel it and create the right one
-        #3. If there are none, create the right one
-        #4. Create the right one
-        #5. Check again. If it's not there, loop back to 0.   <------------- Still need to do this
-        #
-        #-Calculating the correct stop-loss price should be its own function. That will make all the checking easier
         print('AOA : Updating Stop-Loss Order............')
         expected_stop_price = self.calculateStopPrice()
-        #self.updateActiveOrders()
         update_complete = False
+        loop_count = 0
         while not(update_complete) and expected_stop_price:
+            loop_count += 1
             if len(self.openStopLossOrders['Open Orders']) > 1:
                 print('AOA : Huh?!?! There were multiple stop-loss orders found! Canceling them them all now...')
                 self.AP.playSound('Tim Allen')
@@ -1617,10 +1615,10 @@ class ArrayOrderAutomator:
                         self.stopLossOrder = ''
                     else:
                         print('AOA : The currently active stop-loss order matches the currently saved ID, our current position amount, and the expected price!')
-                        print('       |------ Current Order ------ | ------ Expected Values ------')
-                        print('ID:    ' + stop_loss_order_ID + ' | ' + self.stopLossOrder['ID'])
-                        print('Amount:' + str(self.stopLossOrder['Amount']) + ' | ' + str(self.currentPositionDict['Amount']))
-                        print('Price: ' + str(self.stopLossOrder['Price']) + ' | ' + str(expected_stop_price))
+                        print('        | ---------- Current Order ---------- | ---------- Expected Values -----------')
+                        print('ID:     |' + stop_loss_order_ID + ' | ' + self.stopLossOrder['ID'])
+                        print('Amount: |                ' + str(self.stopLossOrder['Amount']) + '           |             ' + str(self.currentPositionDict['Amount']))
+                        print('Price:  |            '    + str(self.stopLossOrder['Price']) + '           |           ' + str(expected_stop_price))
             else:
                 print('AOA : No stop-loss order found!')
                 self.stopLossOrder = ''
@@ -1641,6 +1639,13 @@ class ArrayOrderAutomator:
                       " order for " + str(self.stopLossOrder['Amount']) + \
                       " at $" + str(self.stopLossOrder['Stop Price']))
                 update_complete = True
+            if loop_count >= 3 and not(update_complete):
+                print("AOA : Huh?!?! updateStopLoss() has looped " + str(loop_count) + " times! That's weird...")
+                self.AP.playSound('Tim Allen')
+            if loop_count >= 7 and not(update_complete):
+                print("AOA : updateStopLoss() FAILED! It looped " + str(loop_count) + "times without success!")
+                self.AP.playSound('Kill Bill Siren')
+                break
 
                 
         
