@@ -38,7 +38,7 @@ class ArrayOrderAutomator:
                                       'Session Total PNL': ''}
         self.automationSettings = {'Account': 'Main', \
                                    'Symbol': 'BTC/USD', \
-                                   'Number of Entry Orders': 80, \
+                                   'Number of Entry Orders': 90, \
                                                             #65, \
                                    'Exit Strategy': 'Profit at Entry', \
                                    # ^ This determines how the orders that close positions are calculated
@@ -62,13 +62,13 @@ class ArrayOrderAutomator:
                                    'Long Exit Spread %': .01, \
                                    'Short Exit Spread %': .01, \
                                    'Stop-Loss Spread %': .043, \
-                                   'Stop-Loss Modifier %': .00050, \
+                                   'Stop-Loss Modifier %': .00200, \
                                    # 15% seem to be the max change possible in a very short period
-                                   'Refresh Rate': 20, \
+                                   'Refresh Rate': 3, \
                                    'Long Shift Gap': 60, \
                                    'Short Shift Gap': 60, \
-                                   'Long Entry Amount': 9000, \
-                                   'Short Entry Amount': 8500, \
+                                   'Long Entry Amount': 12000, \
+                                   'Short Entry Amount': 11000, \
                                    'Exit Amount': 5, \
                                    #^ This could also be a % of the Long or Short Amount (side being determined by the side of the position)
                                    #maybe get rid of Exit Amount and just use 0 - always treat the side you're on differently from the other
@@ -1041,20 +1041,20 @@ class ArrayOrderAutomator:
     #   -Enable awareness of "levels"; if a falling stop loss is 50029, make it 49950 instead
         print('AOA : Calculating Stop-Loss Price...........')
         if self.currentPositionDict['Side'].lower() == 'buy':
-            starting_price = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Starting Price']
+            intended_starting_price = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Array Order Parameters']['Highest Price Order Price']
             if self.automationSettings['Stop-Loss Strategy'] == 'Static %':
-                stop_price = starting_price * (1 - self.automationSettings['Stop-Loss Spread %'])
+                stop_price = intended_starting_price * (1 - self.automationSettings['Stop-Loss Spread %'])
             elif self.automationSettings['Stop-Loss Strategy'] == 'Based on Entry Spread %':
-                stop_price = starting_price * (1 - self.automationSettings['Long Entry Spread %']) * (1 - self.automationSettings['Stop-Loss Modifier %'])
+                stop_price = intended_starting_price * (1 - self.automationSettings['Long Entry Spread %']) * (1 - self.automationSettings['Stop-Loss Modifier %'])
             else:
                 print('AOA : No recognized Stop-Loss Strategy was found! Stop-Loss Price NOT calculated!')
                 stop_price = None
         elif self.currentPositionDict['Side'].lower() == 'sell':
-            starting_price = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price']
+            intended_starting_price = self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Array Order Parameters']['Lowest Price Order Price']
             if self.automationSettings['Stop-Loss Strategy'] == 'Static %':
-                stop_price = starting_price * (1 + self.automationSettings['Stop-Loss Spread %'])
+                stop_price = intended_starting_price * (1 + self.automationSettings['Stop-Loss Spread %'])
             elif self.automationSettings['Stop-Loss Strategy'] == 'Based on Entry Spread %':
-                stop_price = starting_price * (1 + self.automationSettings['Short Entry Spread %']) * (1 + self.automationSettings['Stop-Loss Modifier %'])
+                stop_price = intended_starting_price * (1 + self.automationSettings['Short Entry Spread %']) * (1 + self.automationSettings['Stop-Loss Modifier %'])
             else:
                 print('AOA : No recognized Stop-Loss Strategy was found! Stop-Loss Price NOT calculated!')
                 stop_price = None
@@ -1430,6 +1430,7 @@ class ArrayOrderAutomator:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Starting Price'] = max(buy_order_prices)
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Ending Price'] = min(buy_order_prices)
                     print("            Buy Orders start at " + str(max(buy_order_prices)) + " and end at " + str(min(buy_order_prices)) + "\n")
+                    print("            Intended Starting Price: " + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Order Settings']['Price']))
                 else:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Starting Price'] = False
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Ending Price'] = False
@@ -1439,11 +1440,12 @@ class ArrayOrderAutomator:
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Active Orders'] = sell_orders
                 self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Total Amount'] = sell_total_amount
                 print("            Sell Orders' Total Amount: " + str(sell_total_amount))
-                print("            # of Sell Orders: " + str(len(sell_orders)) + "\n")
+                print("            # of Sell Orders: " + str(len(sell_orders)))
                 if len(sell_orders) > 0:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price'] = min(sell_order_prices)
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Ending Price'] = max(sell_order_prices)
                     print("            Sell Orders start at " + str(min(sell_order_prices)) + " and end at " + str(max(sell_order_prices)) + "\n")
+                    print("            Intended Starting Price: " + str(self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Order Settings']['Price']))
                 else:
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Starting Price'] = False
                     self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Ending Price'] = False
@@ -1617,13 +1619,13 @@ class ArrayOrderAutomator:
                         print('AOA : The currently active stop-loss order matches the currently saved ID, our current position amount, and the expected price!')
                         print('        | ---------- Current Order ---------- | ---------- Expected Values -----------')
                         print('ID:     |' + stop_loss_order_ID + ' | ' + self.stopLossOrder['ID'])
-                        print('Amount: |                ' + str(self.stopLossOrder['Amount']) + '           |             ' + str(self.currentPositionDict['Amount']))
-                        print('Price:  |            '    + str(self.stopLossOrder['Price']) + '           |           ' + str(expected_stop_price))
+                        print('Amount: |                   ' + str(self.stopLossOrder['Amount']) + '              |             ' + str(self.currentPositionDict['Amount']))
+                        print('Price:  |              '    + str(self.stopLossOrder['Price']) + '              |           ' + str(expected_stop_price))
             else:
                 print('AOA : No stop-loss order found!')
                 self.stopLossOrder = ''
             if self.stopLossOrder == '':
-                if self.exiting:
+                if self.exiting and self.currentPositionDict['Amount'] > 0:
                     print('AOA : Creating a new stop-loss order...........')
                     self.stopLossOrder = self.OE.createStopLossOrder(expected_stop_price, current_price=self.OE.current_price, position_dict=self.currentPositionDict)
                     print('AOA : Stop-loss order created!')
@@ -1643,7 +1645,7 @@ class ArrayOrderAutomator:
                 print("AOA : Huh?!?! updateStopLoss() has looped " + str(loop_count) + " times! That's weird...")
                 self.AP.playSound('Tim Allen')
             if loop_count >= 7 and not(update_complete):
-                print("AOA : updateStopLoss() FAILED! It looped " + str(loop_count) + "times without success!")
+                print("AOA : updateStopLoss() FAILED! It looped " + str(loop_count) + " times without success!")
                 self.AP.playSound('Kill Bill Siren')
                 break
 
@@ -1652,6 +1654,11 @@ class ArrayOrderAutomator:
 
     def inCaseOfPositionClosed(self):
         print('AOA : !!!!!!!!!!!!!!!*************        Position Closed        *************!!!!!!!!!!!!!!!')
+        session_PNL = self.OE.CTE.getBalances()['Spot'][self.automationSettings['Symbol'].split('/')[0]]['total'] - self.starting_balance
+        session_PNL_in_USD = round(self.OE.current_price * session_PNL, 2)
+        self.automationSessionData['Session Total PNL'] = session_PNL
+        print('\nAOA : *$*$*$*$*$*     Current Session PNL: ' + str('{0:.8f}'.format(session_PNL)) + ' BTC    *$*$*$*$*$*')
+        print('AOA : *$*$*$*$*$*     Current Session PNL: $' + str(session_PNL_in_USD) + '             *$*$*$*$*$*\n')
         self.AP.playSound('Buffy Theme Song Ending Drumroll TRIMMED')
         self.previousPositionDict = {'Amount': 0}
         self.currentPositionLog = {'Entry Amount Closed': 0, \
