@@ -760,7 +760,7 @@ class OperateExchange:
                 print('OE : *******************************      WEIRD THING! The total_order_amount was both too small AND too big!')
                 print('OE : *******************************')
             # If Quick Granularity is being used, this reduces the number of orders further from the starting price
-            if quick_granularity_intensity:
+            if quick_granularity_intensity and qg_start_percent and gq_end_percent:
                 print('qg_start_percent', qg_start_percent)
                 print('qg_end_percent', qg_end_percent)
                 number_of_orders = len(array_of_orders)
@@ -1350,7 +1350,7 @@ class OperateExchange:
         order_settings_by_price = {}
         total_amount = 0
         side = array_of_orders[0]['Side']
-        self.current_price = self.CTE.exchange.fetchTicker(array_of_orders[0]['Symbol'])['bid']
+        #self.current_price = self.CTE.exchange.fetchTicker(array_of_orders[0]['Symbol'])['bid']
         for order_settings in array_of_orders:
             failed_to_post = False
         # This price check eliminates the unnecessary posting of orders that are so far off-side they can't be executed
