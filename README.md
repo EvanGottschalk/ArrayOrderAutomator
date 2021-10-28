@@ -95,13 +95,11 @@ This idea initially manifested itself as [`OperateExchangeGUI.py`](https://githu
 
 ### Prerequisites
 
-Before using `ArrayOrderAutomator`, you must first obtain an API key and secret from the cryptocurrency exchange of their choosing. You also need to install the `Pandas` and [`CCXT`](https://github.com/ccxt/ccxt) libraries.
+Before using `ArrayOrderAutomator`, you must first obtain an API key and secret from the cryptocurrency exchange of your choosing. You also need to install the `Pandas` and [`CCXT`](https://github.com/ccxt/ccxt) libraries.
 
 ### Installation
 
-EXAMPLE FROM OPERATEEXCHANGEGUI
-
-1. Install [`CCXT`](https://github.com/ccxt/ccxt), and optionally `Pandas` and `Matplotlib` if you want to see data visualizations. The easiest way to do this to download `requirements.txt` and use `pip`:
+1. Install [`CCXT`](https://github.com/ccxt/ccxt), and optionally `Pandas` if you want to record your trading history. The easiest way to do this to download `requirements.txt` and use `pip`:
     ```
     pip install -r requirements.txt
     ```
