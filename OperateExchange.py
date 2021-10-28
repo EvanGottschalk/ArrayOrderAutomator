@@ -1350,9 +1350,12 @@ class OperateExchange:
         order_settings_by_price = {}
         total_amount = 0
         side = array_of_orders[0]['Side']
-        #self.current_price = self.CTE.exchange.fetchTicker(array_of_orders[0]['Symbol'])['bid']
+        order_count = 0
         for order_settings in array_of_orders:
             failed_to_post = False
+            order_count += 1
+            if order_count % 5 == 0:
+                self.current_price = self.CTE.fetchCurrentPrice()
         # This price check eliminates the unnecessary posting of orders that are so far off-side they can't be executed
             if side == 'buy':
                 if order_settings['Price'] > 1.01 * self.current_price:
