@@ -40,6 +40,8 @@ class ArrayOrderAutomator:
                                    'Symbol': 'BTC/USD', \
                                    'Number of Entry Orders': 90, \
                                                             #65, \
+                                   'Number of Exit Orders': 40, \
+                                                            #65, \
                                    'Exit Strategy': 'Profit at Entry', \
                                    # ^ This determines how the orders that close positions are calculated
                                    'Rebuild Strategy': 'No Rebuild', \
@@ -300,8 +302,6 @@ class ArrayOrderAutomator:
                         else:
                             print('\nAOA : No order found! Creating LONG ENTRY order at $' + str(self.OE.current_price))
                         self.createArrayOrder('buy')
-                        self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
-                    self.currentPositionDict = self.OE.CTE.getPositions()
                 # Initial Short array order
                     print('\nAOA : Checking SHORT Array Order...')
                     if self.activeArrayOrderNumbers['Short'] == '':
@@ -824,7 +824,7 @@ class ArrayOrderAutomator:
         spread = side_spread_percent * starting_price
         basic_spread = spread
     # Original Exit Strategy calculation of spread
-        if self.automationSettings['Exit Strategy'] == 'Original' or self.automationSettings['Exit Strategy'] == 'Original+':
+        if self.exiting and self.automationSettings['Exit Strategy'] == 'Original' or self.automationSettings['Exit Strategy'] == 'Original+':
             if ((side.lower() == 'buy' or side.lower() == 'long') and (self.exiting == 'Short') and (current_position_side == 'sell')) or \
                ((side.lower() == 'sell' or side.lower() == 'short') and (self.exiting == 'Long') and (current_position_side == 'buy')):
                 if side.lower() == 'buy' or side.lower() == 'long':
@@ -839,7 +839,7 @@ class ArrayOrderAutomator:
                            str(round(100 * (self.currentPositionDict['Amount'] / side_amount), 2)) + \
                            '% of our ' + current_position_side + ' Amount ' + str(self.automationSettings['Short Entry Amount']))
     # Profit at Midpoint Spread Calculation
-        elif self.automationSettings['Exit Strategy'] == 'Profit at Midpoint' or self.automationSettings['Exit Strategy'] == 'Profit at Entry':
+        elif self.exiting and self.automationSettings['Exit Strategy'] == 'Profit at Midpoint':
             if (side.lower() == 'buy' or side.lower() == 'long') and (self.exiting == 'Short') and (current_position_side.lower() == 'sell'):
                 position_gap = self.OE.current_price - current_position_entry
                 exact_midpoint_spread = 2 * position_gap
@@ -881,15 +881,23 @@ class ArrayOrderAutomator:
                     print('AOA : EXIT SPREAD changed from ' + str(basic_spread) + ' to ' + str(spread) + ' because we are exiting a LONG position and ' + \
                           'the Minimum Exit Spread is being used')
     # "Profit at Entry" spread is calculated by using the Minimum Exit Spread and increasing it by the size of the current position relative to the Entry Amounts
-        if self.exiting and self.automationSettings['Exit Strategy'] == 'Profit at Entry':
+        elif self.exiting and self.automationSettings['Exit Strategy'] == 'Profit at Entry':
+            print('AOA : Using "Profit at Entry" strategy for calculating spread.....')
             if side == 'buy' and self.currentPositionDict['Side'].lower() == 'sell':
                 spread = self.automationSettings['Minimum Exit Spread']
+                # spread is reduced based on the distance of the current price from the entry price
+                if self.currentPositionDict['Entry Price'] > self.OE.current_price:
+                    spread = spread * (1 / ((self.currentPositionDict['Entry Price'] - self.OE.current_price) / (2 * self.automationSettings['Minimum Exit Spread'])))
+                # spread is increased based on the size of the position relative to the Short Entry Amount
                 spread = spread * (1 + (self.currentPositionDict['Amount'] / self.automationSettings['Short Entry Amount']))
             elif side == 'sell' and self.currentPositionDict['Side'].lower() == 'buy':
                 spread = self.automationSettings['Minimum Exit Spread']
+                if self.OE.current_price > self.currentPositionDict['Entry Price']:
+                    spread = spread * (1 / ((self.OE.current_price - self.currentPositionDict['Entry Price']) / (2 * self.automationSettings['Minimum Exit Spread'])))
                 spread = spread * (1 + (self.currentPositionDict['Amount'] / self.automationSettings['Long Entry Amount']))
         print('AOA : Spread calculated: $' + str(spread))
         return(spread)
+    
 
     def calculateStartingPrice(self, side):
         print('AOA : Calculating Starting Price for ' + side + ' order...')
@@ -1067,6 +1075,8 @@ class ArrayOrderAutomator:
 
     def createArrayOrder(self, side):
     # Settings default to entry settings, which includes original basic Spread calculation
+        self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
+        self.currentPositionDict = self.OE.CTE.getPositions()
         if side == 'sell':
             symbol = self.OE.orderSettings['Symbol']
             if symbol == 'BTC' or symbol == 'BTC/USD' or symbol == 'BTC/USDT':
@@ -1232,8 +1242,8 @@ class ArrayOrderAutomator:
                (side == 'buy' and self.exiting == 'Short' and self.currentPositionDict['Side'].lower() == 'sell'):
                 if number_of_orders > amount / 2:
                     granularity = .5 + int(2 * ((spread / amount) * 2)) / 2
-                elif self.automationSettings['Exit Strategy'] == 'Profit at Midpoint':
-                    granularity = granularity * 2
+                else:
+                    granularity = (int(spread / (.5 * self.automationSettings['Number of Exit Orders'])) / 2) + .5
 ####                else:
 ####                    print('GRANULARITY NOT REASSIGNED!')
 ####                    self.AP.playSound('Tim Allen')
@@ -1248,7 +1258,7 @@ class ArrayOrderAutomator:
             print('\nAOA : !!!!!!!!!!!!!!!!!!!!!!!!!! Order is NOT BEING CREATED due to a critical calculation error!!!!!!!!!!!!!!!!!!!!!!!!')
             self.AP.playSound('Navi Hey')
         else:
-        # Relief Order is created if creating an exit order and Relief Order conditions are met
+            # Relief Order is created if creating an exit order and Relief Order conditions are met
             if relief_amount:
                 relief_spread = abs(self.OE.current_price - starting_price)
                 relief_granularity = relief_spread / relief_amount
@@ -1312,16 +1322,10 @@ class ArrayOrderAutomator:
                 print('AOA : ' + side.upper() + ' ENTRY order created!\n')
   # # Position and Active Orders are updated
         self.updateActiveOrders()
+        self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
         self.currentPositionDict = self.OE.CTE.getPositions()
         self.order_created_this_loop = True
-    # If current_side was modified at the beginning because this created a sell order, current_price is reset back to being the 'bid' price instead of 'ask'
-        if side == 'sell':
-            if symbol == 'BTC' or symbol == 'BTC/USD' or symbol == 'BTC/USDT':
-                self.OE.current_price -= .5
-            elif symbol == 'LTC' or symbol == 'LTC/USD' or symbol == 'LTC/USDT':
-                self.OE.current_price -= .01
-            elif symbol == 'DOGE' or symbol == 'DOGE/USD' or symbol == 'DOGE/USDT':
-                self.OE.current_price -= .0001
+
 
     def cancelArrayOrder(self, array_order_number):
         if not(self.testing):
@@ -1641,10 +1645,10 @@ class ArrayOrderAutomator:
                       " order for " + str(self.stopLossOrder['Amount']) + \
                       " at $" + str(self.stopLossOrder['Stop Price']))
                 update_complete = True
-            if loop_count >= 3 and not(update_complete):
+            if loop_count >= 5 and not(update_complete):
                 print("AOA : Huh?!?! updateStopLoss() has looped " + str(loop_count) + " times! That's weird...")
                 self.AP.playSound('Tim Allen')
-            if loop_count >= 7 and not(update_complete):
+            if loop_count >= 10 and not(update_complete):
                 print("AOA : updateStopLoss() FAILED! It looped " + str(loop_count) + " times without success!")
                 self.AP.playSound('Kill Bill Siren')
                 break
