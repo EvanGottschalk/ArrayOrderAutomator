@@ -38,7 +38,7 @@ class ArrayOrderAutomator:
                                       'Session Total PNL': ''}
         self.automationSettings = {'Account': 'Main', \
                                    'Symbol': 'BTC/USD', \
-                                   'Number of Entry Orders': 90, \
+                                   'Number of Entry Orders': 35, \
                                                             #65, \
                                    'Number of Exit Orders': 40, \
                                                             #65, \
@@ -46,7 +46,7 @@ class ArrayOrderAutomator:
                                    # ^ This determines how the orders that close positions are calculated
                                    'Rebuild Strategy': 'No Rebuild', \
                                    # ^ This determines the amount of an entry order to rebuild that has been partly filled
-                                   'Quick Granularity Strategy': False, \
+                                   'Quick Granularity Strategy': True, \
                                    # ^ This determines if Quick Granularity is used and how it is used
                                    'Stop-Loss Strategy': 'Based on Entry Spread %', \
                                    # ^ This determines if stop-loss orders are used how their prices are calculated
@@ -58,13 +58,12 @@ class ArrayOrderAutomator:
                                    'Exit Steepness': 0, \
                                    'Entry Style': 'Linear', \
                                    'Exit Style': 'Linear', \
-                                   'Quick Granularity Intensity': 1, \
                                    'Long Entry Spread %': .0215, \
                                    'Short Entry Spread %': .0215, \
                                    'Long Exit Spread %': .01, \
                                    'Short Exit Spread %': .01, \
                                    'Stop-Loss Spread %': .043, \
-                                   'Stop-Loss Modifier %': .00200, \
+                                   'Stop-Loss Modifier %': .00150, \
                                    # 15% seem to be the max change possible in a very short period
                                    'Refresh Rate': 3, \
                                    'Long Shift Gap': 60, \
@@ -85,18 +84,21 @@ class ArrayOrderAutomator:
                                    # It could be a % of the current price instead
                                    'Midpoint Profit Modifier': .20, \
                                    # ^ This makes the exit spread slightly larger so more of the order is in profit (Profit at Midpoint)
-                                   'Quick Granularity Spread %': .4, \
+                                   'Quick Granularity Intensity': 5, \
+                                   'Quick Granularity Spread %': .2, \
                                    # ^ This determines how broad the low-granularity section of an entry array order will be
-                                   'Quick Granularity Adjustment Gap': None, \
+                                   'Quick Granularity Adjustment Gap': .15, \
                                    # ^ This is the minimum % the current_price needs to deviate from the Quick Granularity Start % and
                                    #   away from the Array Order Starting Price for an entry order to be shifted
-                                   'Quick Granularity Berth': .020, \
+                                   'Quick Granularity Berth': .000, \
+                                   #'Quick Granularity Berth': .020, \
                                    # ^ This is the percent of Quick Granularity orders that are placed on the inexecutable side of current_price in case the
                                    #   price starts to go our way
-                                   'Quick Granularity Berth Adjustment Gap': .0125, \
+                                   'Quick Granularity Berth Adjustment Gap': .000, \
+                                   #'Quick Granularity Berth Adjustment Gap': .0125, \
                                    # ^ This is the minimum % the current_price needs to deviate from the Quick Granularity Start %  and
                                    #   towards the Array Order Starting Price for an entry order to be shifted
-                                   'Slow Granularity Multiplier': 5, \
+                                   'Slow Granularity Multiplier': 0, \
                                    # ^ The spread beyond the Quick Granularity % is multiplied by this number
                                    # Relief Orders are uniform Array Orders created on the wrong side of the position, reducing the risk of getting stuck in a trade
                                    # Relief Order % is the percentage amount of the current position size to be bought/sold on the wrong side
@@ -886,14 +888,18 @@ class ArrayOrderAutomator:
             if side == 'buy' and self.currentPositionDict['Side'].lower() == 'sell':
                 spread = self.automationSettings['Minimum Exit Spread']
                 # spread is reduced based on the distance of the current price from the entry price
-                if self.currentPositionDict['Entry Price'] > self.OE.current_price:
-                    spread = spread * (1 / ((self.currentPositionDict['Entry Price'] - self.OE.current_price) / (2 * self.automationSettings['Minimum Exit Spread'])))
+                if self.currentPositionDict['Entry Price'] > self.OE.current_price + self.automationSettings['Minimum Exit Spread']:
+                    spread = spread * (1 / ((self.currentPositionDict['Entry Price'] - self.OE.current_price) / (.5 * self.automationSettings['Minimum Exit Spread'])))
+                elif self.currentPositionDict['Entry Price'] > self.OE.current_price:
+                    spread = spread - (.5 * spread * ((self.currentPositionDict['Entry Price'] - self.OE.current_price) / self.automationSettings['Minimum Exit Spread']))
                 # spread is increased based on the size of the position relative to the Short Entry Amount
                 spread = spread * (1 + (self.currentPositionDict['Amount'] / self.automationSettings['Short Entry Amount']))
             elif side == 'sell' and self.currentPositionDict['Side'].lower() == 'buy':
                 spread = self.automationSettings['Minimum Exit Spread']
-                if self.OE.current_price > self.currentPositionDict['Entry Price']:
-                    spread = spread * (1 / ((self.OE.current_price - self.currentPositionDict['Entry Price']) / (2 * self.automationSettings['Minimum Exit Spread'])))
+                if self.OE.current_price > self.currentPositionDict['Entry Price'] + self.automationSettings['Minimum Exit Spread']:
+                    spread = spread * (1 / ((self.OE.current_price - self.currentPositionDict['Entry Price']) / (.5 * self.automationSettings['Minimum Exit Spread'])))
+                elif self.OE.current_price > self.currentPositionDict['Entry Price']:
+                    spread = spread - (.5 * spread * ((self.OE.current_price - self.currentPositionDict['Entry Price']) / self.automationSettings['Minimum Exit Spread']))
                 spread = spread * (1 + (self.currentPositionDict['Amount'] / self.automationSettings['Long Entry Amount']))
         print('AOA : Spread calculated: $' + str(spread))
         return(spread)
@@ -1307,6 +1313,7 @@ class ArrayOrderAutomator:
                                           'Quick Granularity Intensity': quick_granularity_intensity, \
                                           'Quick Granularity Start %': qg_start_percent, \
                                           'Quick Granularity End %': qg_end_percent, \
+                                          'Slow Granularity Multiplier': self.automationSettings['Slow Granularity Multiplier'], \
                                           'Maximum Amount': maximum_amount, \
                                           'Readjust to Execute Maximum Amount': False}
             self.OE.createArrayOrder('update_current_parameters')
@@ -1584,15 +1591,26 @@ class ArrayOrderAutomator:
     def updateStopLoss(self):
         print('AOA : Updating Stop-Loss Order............')
         expected_stop_price = self.calculateStopPrice()
+        if self.currentPositionDict['Side'].lower() == 'buy':
+            expected_stop_amount = self.automationSettings['Long Entry Amount']
+        else:
+            expected_stop_amount = self.automationSettings['Short Entry Amount']
         update_complete = False
         loop_count = 0
         while not(update_complete) and expected_stop_price:
             loop_count += 1
+            self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
+            self.updateActiveOrders()
+            self.currentPositionDict = self.OE.CTE.getPositions()
+            if self.currentPositionDict['Side'].lower() == 'buy':
+                expected_stop_amount = self.currentPositionDict['Amount'] + self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Long']]['Total Amount']
+            else:
+                expected_stop_amount = self.currentPositionDict['Amount'] + self.OE.arrayOrderLedger[self.activeArrayOrderNumbers['Short']]['Total Amount']
             if len(self.openStopLossOrders['Open Orders']) > 1:
                 print('AOA : Huh?!?! There were multiple stop-loss orders found! Canceling them them all now...')
                 self.AP.playSound('Tim Allen')
                 for order_ID in self.openStopLossOrders['Open Orders']:
-                    self.OE.CTE.exchange.cancelOrder(order_ID, self.openStopLossOrders['Open Orders'][order_ID]['info']['symbol'])
+                    self.OE.cancelOrder(order_ID, alert=False, pause_time=0, maximum_number_of_attempts=1)
                 self.stopLossOrder = ''
             elif len(self.openStopLossOrders['Open Orders']) == 1:
                 stop_loss_order_ID = list(self.openStopLossOrders['Open Orders'])[0]
@@ -1600,45 +1618,43 @@ class ArrayOrderAutomator:
                 if self.stopLossOrder == '':
                     print('AOA : Huh?!?! There is a stop-loss order open but we do NOT currently have an active stop-loss order saved! Canceling it now...')
                     self.AP.playSound('Tim Allen')
-                    self.OE.CTE.exchange.cancelOrder(stop_loss_order_ID, stop_loss_order['Symbol'])
+                    self.OE.cancelOrder(stop_loss_order_ID, alert=False, pause_time=0, maximum_number_of_attempts=1)
                 elif stop_loss_order_ID != self.stopLossOrder['ID']:
                     print('AOA : Huh?!?! The ID we have saved for our stop-loss does NOT match the currently active stop-loss order! Canceling it now...')
                     self.AP.playSound('Tim Allen')
-                    self.OE.CTE.exchange.cancelOrder(stop_loss_order_ID, stop_loss_order['Symbol'])
+                    self.OE.cancelOrder(stop_loss_order_ID, alert=False, pause_time=0, maximum_number_of_attempts=1)
                     self.stopLossOrder = ''
                 else:
                     self.stopLossOrder = self.openStopLossOrders['Open Orders'][stop_loss_order_ID]
-                    if self.stopLossOrder['Amount'] != self.currentPositionDict['Amount']:
+                    if self.stopLossOrder['Amount'] != expected_stop_amount:
                         print('AOA : The amount of our stop-loss ' + str(self.stopLossOrder['Amount']) + \
-                              ' does NOT match our position size of ' + str(self.currentPositionDict['Amount']) + '. Canceling it now...')
-                        self.OE.CTE.exchange.cancelOrder(self.stopLossOrder['ID'], self.stopLossOrder['Symbol'])
+                              ' does NOT match our entry amount of ' + str(expected_stop_amount) + '. Canceling it now...')
+                        self.OE.cancelOrder(stop_loss_order_ID, alert=False, pause_time=0, maximum_number_of_attempts=1)
                         self.stopLossOrder = ''
                     elif self.stopLossOrder['Stop Price'] + .5 < expected_stop_price or \
                          self.stopLossOrder['Stop Price'] - .5 > expected_stop_price:
                         print('AOA : The price of our stop-loss $' + str(self.stopLossOrder['Stop Price']) + \
                               ' does NOT match the expected price of $' + str(expected_stop_price) + '. Canceling it now...')
-                        self.OE.CTE.exchange.cancelOrder(self.stopLossOrder['ID'], self.stopLossOrder['Symbol'])
+                        self.OE.cancelOrder(stop_loss_order_ID, alert=False, pause_time=0, maximum_number_of_attempts=1)
                         self.stopLossOrder = ''
                     else:
                         print('AOA : The currently active stop-loss order matches the currently saved ID, our current position amount, and the expected price!')
                         print('        | ---------- Current Order ---------- | ---------- Expected Values -----------')
                         print('ID:     |' + stop_loss_order_ID + ' | ' + self.stopLossOrder['ID'])
-                        print('Amount: |                   ' + str(self.stopLossOrder['Amount']) + '              |             ' + str(self.currentPositionDict['Amount']))
+                        print('Amount: |                   ' + str(self.stopLossOrder['Amount']) + '              |             ' + str(expected_stop_amount))
                         print('Price:  |              '    + str(self.stopLossOrder['Price']) + '              |           ' + str(expected_stop_price))
             else:
                 print('AOA : No stop-loss order found!')
                 self.stopLossOrder = ''
             if self.stopLossOrder == '':
-                if self.exiting and self.currentPositionDict['Amount'] > 0:
+                if self.currentPositionDict['Amount'] > 0:
                     print('AOA : Creating a new stop-loss order...........')
-                    self.stopLossOrder = self.OE.createStopLossOrder(expected_stop_price, current_price=self.OE.current_price, position_dict=self.currentPositionDict)
-                    print('AOA : Stop-loss order created!')
-                    self.updateActiveOrders()
-                    self.currentPositionDict = self.OE.CTE.getPositions()
-                    self.OE.current_price = self.OE.CTE.fetchCurrentPrice()
+                    self.stopLossOrder = self.OE.createStopLossOrder(stop_price=expected_stop_price, amount=expected_stop_amount, \
+                                                                     current_price=self.OE.current_price, position_dict=self.currentPositionDict)
+                    print('AOA : Stop-loss order created!')                    
                     update_complete = False
                 else:
-                    print('AOA : We are NOT in EXIT mode, so no stop-loss order is being created.')
+                    print('AOA : We are NOT in a position, so no stop-loss order is being created.')
                     update_complete = True
             else:
                 print("AOA : Stop-Loss Order Update finished! It's a " + self.stopLossOrder['Side'] + \
@@ -1658,6 +1674,9 @@ class ArrayOrderAutomator:
 
     def inCaseOfPositionClosed(self):
         print('AOA : !!!!!!!!!!!!!!!*************        Position Closed        *************!!!!!!!!!!!!!!!')
+        self.OE.CTE.exchange.cancel_all_orders()
+        self.updateActiveOrders()
+        self.updateStopLoss()
         session_PNL = self.OE.CTE.getBalances()['Spot'][self.automationSettings['Symbol'].split('/')[0]]['total'] - self.starting_balance
         session_PNL_in_USD = round(self.OE.current_price * session_PNL, 2)
         self.automationSessionData['Session Total PNL'] = session_PNL
